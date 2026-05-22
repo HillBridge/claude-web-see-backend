@@ -21,9 +21,10 @@
       "@/*":         ["src/*"],
       "@common/*":   ["src/common/*"],
       "@modules/*":  ["src/modules/*"],
-      "@prisma/*":   ["src/prisma/*"],
+      "@shared/*":   ["src/shared/*"],
+      "@prisma/*":   ["src/shared/prisma/*"],
       "@config/*":   ["src/config/*"],
-      "@logger/*":   ["src/logger/*"]
+      "@logger/*":   ["src/shared/logger/*"]
     }
   }
 }

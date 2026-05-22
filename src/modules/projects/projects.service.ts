@@ -4,7 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
-import { PrismaService } from '@/prisma/prisma.service';
+import { PrismaService } from '@shared/prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 

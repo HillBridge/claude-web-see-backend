@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import { PrismaService } from '@/prisma/prisma.service';
+import { PrismaService } from '@shared/prisma/prisma.service';
 import { IPageResult } from '@/common/interfaces/page-result.interface';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUserDto } from './dto/query-user.dto';

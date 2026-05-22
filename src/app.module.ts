@@ -7,8 +7,7 @@ import { TransformInterceptor }   from './common/interceptors/transform.intercep
 import { LoggingInterceptor }     from './common/interceptors/logging.interceptor';
 import { JwtAuthGuard }           from './common/guards/jwt-auth.guard';
 import { RolesGuard }             from './common/guards/roles.guard';
-import { PrismaModule }           from './prisma/prisma.module';
-import { LoggerModule }           from './logger/logger.module';
+import { SharedModule } from './shared/shared.module';
 import {
   AuthModule,
   UsersModule,
@@ -28,8 +27,7 @@ import {
       load: [configuration],
       envFilePath: [`.env.${process.env.NODE_ENV || 'development'}`, '.env'],
     }),
-    LoggerModule,
-    PrismaModule,
+    SharedModule,
     AuthModule,
     UsersModule,
     ProjectsModule,

@@ -1,6 +1,7 @@
 import { Injectable, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import { RedisService } from '@/common/redis/redis.service';
@@ -23,11 +24,14 @@ export class AuthService {
     return isMatch ? user : null;
   }
 
-  /** 登录 — 颁发 JWT */
+  /** 登录 — 颁发 JWT 并写入白名单 */
   async login(user: { id: number; username: string; role: string }) {
-    const payload = { sub: user.id, username: user.username, role: user.role };
+    const jti = uuidv4();
+    const payload = { sub: user.id, username: user.username, role: user.role, jti };
+    const accessToken = this.jwtService.sign(payload);
+    await this.redisService.addToken(user.id, jti, JWT_TTL_SECONDS);
     return {
-      accessToken: this.jwtService.sign(payload),
+      accessToken,
       user: {
         id: user.id,
         username: user.username,
@@ -36,13 +40,14 @@ export class AuthService {
     };
   }
 
-  /** 登出 / 强制下线 — 使该用户当前所有 Token 失效 */
-  async logout(userId: number): Promise<void> {
-    await this.redisService.setUserInvalidatedAt(
-      userId,
-      Math.floor(Date.now() / 1000),
-      JWT_TTL_SECONDS,
-    );
+  /** 登出 — 从白名单移除当前 Token */
+  async logout(userId: number, jti: string): Promise<void> {
+    await this.redisService.removeToken(userId, jti);
+  }
+
+  /** 强制下线 — 移除该用户所有 Token */
+  async forceLogout(userId: number): Promise<void> {
+    await this.redisService.removeAllUserTokens(userId);
   }
 
   /** 注册新用户 */
@@ -63,9 +68,12 @@ export class AuthService {
       password: hashed,
     });
 
-    const payload = { sub: user.id, username: user.username, role: user.role };
+    const jti = uuidv4();
+    const payload = { sub: user.id, username: user.username, role: user.role, jti };
+    const accessToken = this.jwtService.sign(payload);
+    await this.redisService.addToken(user.id, jti, JWT_TTL_SECONDS);
     return {
-      accessToken: this.jwtService.sign(payload),
+      accessToken,
       user: {
         id: user.id,
         username: user.username,

@@ -24,11 +24,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const user = await this.usersService.findById(payload.sub);
     if (!user) throw new UnauthorizedException('用户不存在或已被删除');
 
-    const invalidatedAt = await this.redisService.getUserInvalidatedAt(user.id);
-    if (invalidatedAt && payload.iat <= invalidatedAt) {
+    const isValid = await this.redisService.hasToken(user.id, payload.jti);
+    if (!isValid) {
       throw new UnauthorizedException('Token 已失效，请重新登录');
     }
 
-    return { id: user.id, username: user.username, role: user.role };
+    return { id: user.id, username: user.username, role: user.role, jti: payload.jti };
   }
 }

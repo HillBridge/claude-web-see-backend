@@ -1,11 +1,11 @@
 import { Controller, Post, Req, Body, HttpCode } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Request } from 'express';
 import { ReportService } from './report.service';
 import { ReportDataDto } from './dto/report-data.dto';
-import { Public } from '@/common/decorators/public.decorator';
 
 @ApiTags('数据上报')
+@ApiBearerAuth()
 @Controller()
 export class ReportController {
   constructor(private reportService: ReportService) {}
@@ -20,7 +20,6 @@ export class ReportController {
    *      所以 sendBeacon 数据同样通过 @Body() 可以获取
    */
   @ApiOperation({ summary: '数据上报 (SDK → 服务端)' })
-  @Public()
   @Post('reportData')
   @HttpCode(200)
   async reportData(@Body() body: any, @Req() req: Request): Promise<any> {

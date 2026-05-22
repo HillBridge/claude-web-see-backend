@@ -19,7 +19,6 @@ import {
 import { Response } from 'express';
 import * as path from 'path';
 import { SourceMapService } from './source-map.service';
-import { Public } from '@/common/decorators/public.decorator';
 
 @ApiTags('SourceMap')
 @Controller()
@@ -44,7 +43,6 @@ export class SourceMapController {
 
   @ApiOperation({ summary: '获取 JS SourceMap 文件' })
   @ApiQuery({ name: 'fileName', description: 'JS 文件名 (不含 .map 后缀)' })
-  @Public()
   @Get('getmap')
   async getMap(@Query('fileName') fileName: string, @Res() res: Response) {
     const content = await this.sourceMapService.readMapFile(fileName);

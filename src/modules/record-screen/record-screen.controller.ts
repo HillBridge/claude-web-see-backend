@@ -2,16 +2,14 @@ import { Controller, Get, Param, Query, ParseIntPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { RecordScreenService } from './record-screen.service';
 import { QueryRecordScreenDto } from './dto/query-record-screen.dto';
-import { Public } from '@/common/decorators/public.decorator';
 
 @ApiTags('录屏数据')
+@ApiBearerAuth()
 @Controller()
 export class RecordScreenController {
   constructor(private recordScreenService: RecordScreenService) {}
 
-  /** 兼容旧接口 /getRecordScreenId?id=xxx — 前端播放录屏时调用 */
-  @ApiOperation({ summary: '按 recordScreenId 查询录屏（兼容旧接口，Public）' })
-  @Public()
+  @ApiOperation({ summary: '按 recordScreenId 查询录屏（兼容旧接口）' })
   @Get('getRecordScreenId')
   getByRecordScreenId(@Query('id') id: string) {
     return this.recordScreenService.findByRecordScreenId(id);

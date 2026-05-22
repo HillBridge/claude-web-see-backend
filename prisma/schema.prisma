@@ -1,0 +1,174 @@
+// ============================================================
+// Prisma Schema  —  web-see 前端监控平台
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// 枚举
+// ============================================================
+
+enum Role {
+  ADMIN
+  USER
+}
+
+// ============================================================
+// 用户表 (鉴权/权限)
+// ============================================================
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique @db.VarChar(50)
+  email     String   @unique @db.VarChar(100)
+  password  String   @db.VarChar(255)
+  role      Role     @default(USER)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  projects Project[]
+
+  @@map("users")
+}
+
+// ============================================================
+// 项目表 (apikey 管理)
+// ============================================================
+model Project {
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(100)
+  apikey      String   @unique @db.VarChar(64)
+  description String?  @db.VarChar(255)
+  ownerId     Int      @map("owner_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@map("projects")
+}
+
+// ============================================================
+// 错误上报表
+// type: error | unhandledrejection | resourceError | httpError
+// ============================================================
+model ErrorReport {
+  id             Int      @id @default(autoincrement())
+  type           String   @db.VarChar(50)
+  subType        String?  @map("sub_type") @db.VarChar(50)
+  message        String?  @db.Text
+  pageUrl        String?  @map("page_url") @db.VarChar(500)
+  time           BigInt?
+  apikey         String   @db.VarChar(64)
+  monitorUserId  String?  @map("monitor_user_id") @db.VarChar(100)
+  sdkVersion     String?  @map("sdk_version") @db.VarChar(20)
+  deviceInfo     Json?    @map("device_info")
+  recordScreenId String?  @map("record_screen_id") @db.VarChar(64)
+  stack          String?  @db.Text
+  filename       String?  @db.VarChar(500)
+  lineNo         Int?     @map("line_no")
+  colNo          Int?     @map("col_no")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  breadcrumbs Breadcrumb[]
+
+  @@index([apikey])
+  @@index([type])
+  @@index([recordScreenId])
+  @@index([createdAt])
+  @@map("error_reports")
+}
+
+// ============================================================
+// 用户行为轨迹表 (归属于某条错误记录)
+// category: Click | Http | Code_Error | Resource_Error | Route
+// ============================================================
+model Breadcrumb {
+  id            Int      @id @default(autoincrement())
+  errorReportId Int      @map("error_report_id")
+  category      String?  @db.VarChar(50)
+  data          Json?
+  status        String?  @db.VarChar(20)
+  time          BigInt?
+  message       String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  errorReport ErrorReport @relation(fields: [errorReportId], references: [id], onDelete: Cascade)
+
+  @@index([errorReportId])
+  @@map("breadcrumbs")
+}
+
+// ============================================================
+// 性能数据上报表
+// 包含 Web Vitals: FP/FCP/LCP/FID/CLS/TTFB 及网络时序
+// ============================================================
+model PerformanceReport {
+  id            Int      @id @default(autoincrement())
+  pageUrl       String?  @map("page_url") @db.VarChar(500)
+  time          BigInt?
+  apikey        String   @db.VarChar(64)
+  monitorUserId String?  @map("monitor_user_id") @db.VarChar(100)
+  sdkVersion    String?  @map("sdk_version") @db.VarChar(20)
+  deviceInfo    Json?    @map("device_info")
+  // Web Vitals (毫秒)
+  fp            Decimal? @db.Decimal(10, 2)
+  fcp           Decimal? @db.Decimal(10, 2)
+  lcp           Decimal? @db.Decimal(10, 2)
+  fid           Decimal? @db.Decimal(10, 2)
+  cls           Decimal? @db.Decimal(10, 4)
+  ttfb          Decimal? @db.Decimal(10, 2)
+  // 网络时序 (毫秒)
+  dns           Decimal? @db.Decimal(10, 2)
+  tcp           Decimal? @db.Decimal(10, 2)
+  ssl           Decimal? @db.Decimal(10, 2)
+  loadTime      Decimal? @map("load_time") @db.Decimal(10, 2)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([apikey])
+  @@index([createdAt])
+  @@map("performance_reports")
+}
+
+// ============================================================
+// 录屏数据表 (rrweb 压缩事件流)
+// ============================================================
+model RecordScreen {
+  id             Int      @id @default(autoincrement())
+  recordScreenId String   @unique @map("record_screen_id") @db.VarChar(64)
+  events         String   @db.LongText
+  apikey         String?  @db.VarChar(64)
+  monitorUserId  String?  @map("monitor_user_id") @db.VarChar(100)
+  pageUrl        String?  @map("page_url") @db.VarChar(500)
+  time           BigInt?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([recordScreenId])
+  @@index([apikey])
+  @@map("record_screens")
+}
+
+// ============================================================
+// 白屏检测数据表
+// ============================================================
+model WhiteScreen {
+  id            Int      @id @default(autoincrement())
+  pageUrl       String?  @map("page_url") @db.VarChar(500)
+  time          BigInt?
+  apikey        String?  @db.VarChar(64)
+  monitorUserId String?  @map("monitor_user_id") @db.VarChar(100)
+  sdkVersion    String?  @map("sdk_version") @db.VarChar(20)
+  deviceInfo    Json?    @map("device_info")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([apikey])
+  @@index([createdAt])
+  @@map("white_screens")
+}

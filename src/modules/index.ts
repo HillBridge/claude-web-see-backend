@@ -1,0 +1,9 @@
+export { AuthModule }         from './auth/auth.module';
+export { UsersModule }        from './users/users.module';
+export { ProjectsModule }     from './projects/projects.module';
+export { ReportModule }       from './report/report.module';
+export { ErrorsModule }       from './errors/errors.module';
+export { PerformanceModule }  from './performance/performance.module';
+export { RecordScreenModule } from './record-screen/record-screen.module';
+export { WhiteScreenModule }  from './white-screen/white-screen.module';
+export { SourceMapModule }    from './source-map/source-map.module';

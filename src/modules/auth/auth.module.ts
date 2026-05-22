@@ -7,11 +7,13 @@ import { AuthController } from './auth.controller';
 import { LocalStrategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from '../users/users.module';
+import { RedisModule } from '@/common/redis/redis.module';
 
 @Module({
   imports: [
     UsersModule,
     PassportModule,
+    RedisModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

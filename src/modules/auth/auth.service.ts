@@ -1,18 +1,18 @@
-import {
-  Injectable,
-  ConflictException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
+import { RedisService } from '@/common/redis/redis.service';
+
+const JWT_TTL_SECONDS = 7 * 24 * 3600; // 与 JWT_EXPIRES_IN=7d 保持一致
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private redisService: RedisService,
   ) {}
 
   /** Local 策略调用: 校验用户名密码 */
@@ -34,6 +34,15 @@ export class AuthService {
         role: user.role,
       },
     };
+  }
+
+  /** 登出 / 强制下线 — 使该用户当前所有 Token 失效 */
+  async logout(userId: number): Promise<void> {
+    await this.redisService.setUserInvalidatedAt(
+      userId,
+      Math.floor(Date.now() / 1000),
+      JWT_TTL_SECONDS,
+    );
   }
 
   /** 注册新用户 */

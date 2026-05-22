@@ -7,6 +7,7 @@ import { TransformInterceptor }   from './common/interceptors/transform.intercep
 import { LoggingInterceptor }     from './common/interceptors/logging.interceptor';
 import { JwtAuthGuard }           from './common/guards/jwt-auth.guard';
 import { RolesGuard }             from './common/guards/roles.guard';
+import { RedisModule }            from './common/redis/redis.module';
 import { SharedModule } from './shared/shared.module';
 import {
   AuthModule,
@@ -27,6 +28,7 @@ import {
       load: [configuration],
       envFilePath: [`.env.${process.env.NODE_ENV || 'development'}`, '.env'],
     }),
+    RedisModule,
     SharedModule,
     AuthModule,
     UsersModule,

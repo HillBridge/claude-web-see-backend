@@ -1,6 +1,23 @@
-import { Controller, Get, Query, Res } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Query,
+  Res,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiQuery,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
 import { Response } from 'express';
+import * as path from 'path';
 import { SourceMapService } from './source-map.service';
 import { Public } from '@/common/decorators/public.decorator';
 
@@ -9,17 +26,29 @@ import { Public } from '@/common/decorators/public.decorator';
 export class SourceMapController {
   constructor(private sourceMapService: SourceMapService) {}
 
-  /**
-   * 兼容旧接口 /getmap?fileName=xxx
-   * 前端 sourcemap.js 调用此接口还原错误源码位置
-   */
+  @ApiOperation({ summary: '上传 JS SourceMap 文件（CI/CD 调用）' })
+  @ApiQuery({ name: 'apikey', description: '项目 apikey' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
+  @ApiBearerAuth()
+  @Post('uploadmap')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadMap(
+    @UploadedFile() file: Express.Multer.File,
+    @Query('apikey') apikey: string,
+  ) {
+    const fileName = path.basename(file.originalname, '.map');
+    const content = file.buffer.toString('utf-8');
+    return this.sourceMapService.uploadMapFile(apikey, fileName, content);
+  }
+
   @ApiOperation({ summary: '获取 JS SourceMap 文件' })
   @ApiQuery({ name: 'fileName', description: 'JS 文件名 (不含 .map 后缀)' })
   @Public()
   @Get('getmap')
-  getMap(@Query('fileName') fileName: string, @Res() res: Response) {
-    const data = this.sourceMapService.readMapFile(fileName);
+  async getMap(@Query('fileName') fileName: string, @Res() res: Response) {
+    const content = await this.sourceMapService.readMapFile(fileName);
     res.setHeader('Content-Type', 'application/json');
-    res.send(data);
+    res.send(content);
   }
 }

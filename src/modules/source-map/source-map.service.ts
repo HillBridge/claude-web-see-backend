@@ -3,32 +3,32 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
-import * as fs from 'fs';
+import { PrismaService } from '@/shared/prisma/prisma.service';
 
 @Injectable()
 export class SourceMapService {
-  private readonly distPath: string;
+  constructor(private prisma: PrismaService) {}
 
-  constructor(private configService: ConfigService) {
-    const distPathConfig = this.configService.get<string>('distPath') || '../dist';
-    // 相对于当前运行目录解析
-    this.distPath = path.resolve(process.cwd(), distPathConfig);
+  async uploadMapFile(apikey: string, fileName: string, content: string) {
+    return this.prisma.sourceMapFile.upsert({
+      where: { fileName_apikey: { fileName, apikey } },
+      create: { fileName, apikey, content },
+      update: { content },
+    });
   }
 
-  readMapFile(fileName: string): Buffer {
+  async readMapFile(fileName: string): Promise<string> {
     if (!fileName) {
       throw new BadRequestException('fileName 参数不能为空');
     }
-    // 安全校验: 不允许路径穿越
     const safeName = path.basename(fileName);
-    const mapPath = path.join(this.distPath, 'js', `${safeName}.map`);
-
-    if (!fs.existsSync(mapPath)) {
-      throw new NotFoundException(`SourceMap 文件不存在: ${safeName}.map`);
+    const record = await this.prisma.sourceMapFile.findFirst({
+      where: { fileName: safeName },
+    });
+    if (!record) {
+      throw new NotFoundException(`SourceMap 不存在: ${safeName}`);
     }
-
-    return fs.readFileSync(mapPath);
+    return record.content;
   }
 }

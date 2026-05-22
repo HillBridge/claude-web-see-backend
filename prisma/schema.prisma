@@ -156,6 +156,22 @@ model RecordScreen {
 }
 
 // ============================================================
+// SourceMap 文件表 (前端 CI/CD 上传，按 fileName+apikey 唯一)
+// ============================================================
+model SourceMapFile {
+  id        Int      @id @default(autoincrement())
+  fileName  String   @db.VarChar(255)
+  apikey    String   @db.VarChar(64)
+  content   String   @db.LongText
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([fileName, apikey])
+  @@index([apikey])
+  @@map("source_map_files")
+}
+
+// ============================================================
 // 白屏检测数据表
 // ============================================================
 model WhiteScreen {

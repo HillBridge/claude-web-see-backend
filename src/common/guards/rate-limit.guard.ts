@@ -18,10 +18,13 @@ export class RateLimitGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest();
     const apikey: string = req.body?.apikey ?? 'unknown';
-    const ip: string =
+    const raw: string =
       req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
       req.socket.remoteAddress ||
       'unknown';
+    const ip = raw === '::1' ? '127.0.0.1'
+      : raw.startsWith('::ffff:') ? raw.slice(7)
+      : raw;
 
     await this.check(`ratelimit:apikey:${apikey}`, MAX_PER_APIKEY);
     await this.check(`ratelimit:ip:${ip}`, MAX_PER_IP);

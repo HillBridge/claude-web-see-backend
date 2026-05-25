@@ -21,4 +21,5 @@ export default () => ({
     level: process.env.LOG_LEVEL || 'info',
   },
   distPath: process.env.DIST_PATH || '../dist',
+  sourcemapUploadSecret: process.env.SOURCEMAP_UPLOAD_SECRET,
 });

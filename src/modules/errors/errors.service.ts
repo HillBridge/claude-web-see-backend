@@ -31,7 +31,20 @@ export class ErrorsService {
       this.prisma.errorReport.count({ where }),
     ]);
 
-    return { list, total, page, pageSize };
+    return {
+      list: list.map((item) => ({
+        ...item,
+        // 兼容前端 sourcemap.js 期望的字段名
+        fileName: item.filename,
+        line: item.lineNo,
+        column: item.colNo,
+        userId: item.monitorUserId,
+        breadcrumbs: item.breadcrumbs,
+      })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   async findOne(id: number) {

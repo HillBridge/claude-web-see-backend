@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
 import * as fs from 'fs';
 import { MinioService } from '@/shared/minio/minio.service';
+import { PrismaService } from '@/shared/prisma/prisma.service';
 
 @Injectable()
 export class SourceMapService {
@@ -14,6 +15,7 @@ export class SourceMapService {
 
   constructor(
     private minioService: MinioService,
+    private prisma: PrismaService,
     private configService: ConfigService,
   ) {
     const distPathConfig = this.configService.get<string>('distPath') || '../dist';
@@ -28,6 +30,13 @@ export class SourceMapService {
   async uploadMapFile(apikey: string, fileName: string, content: string) {
     const key = this.objectKey(apikey, fileName);
     await this.minioService.putObject(key, Buffer.from(content, 'utf-8'));
+
+    await this.prisma.sourceMapFile.upsert({
+      where: { fileName_apikey: { fileName, apikey } },
+      create: { fileName, apikey, minioKey: key },
+      update: { minioKey: key },
+    });
+
     return { fileName, apikey, key };
   }
 
@@ -55,5 +64,26 @@ export class SourceMapService {
     throw new NotFoundException(
       `SourceMap 不存在: ${safeName}，请确认前端已构建或已上传 map 文件`,
     );
+  }
+
+  async listByApikey(apikey: string) {
+    return this.prisma.sourceMapFile.findMany({
+      where: { apikey },
+      select: { id: true, fileName: true, minioKey: true, createdAt: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  async deleteMapFile(apikey: string, fileName: string) {
+    const record = await this.prisma.sourceMapFile.findUnique({
+      where: { fileName_apikey: { fileName, apikey } },
+    });
+    if (!record) {
+      throw new NotFoundException(`SourceMap 不存在: ${fileName}`);
+    }
+    await this.minioService.removeObject(record.minioKey);
+    await this.prisma.sourceMapFile.delete({
+      where: { fileName_apikey: { fileName, apikey } },
+    });
   }
 }

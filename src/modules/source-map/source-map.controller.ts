@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Query,
   Res,
   Headers,
@@ -17,6 +18,7 @@ import {
   ApiHeader,
   ApiConsumes,
   ApiBody,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
@@ -67,5 +69,26 @@ export class SourceMapController {
     const content = await this.sourceMapService.readMapFile(fileName, apikey);
     res.setHeader('Content-Type', 'application/json');
     res.send(content);
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '查询某项目已上传的 SourceMap 列表' })
+  @ApiQuery({ name: 'apikey', description: '项目 apikey' })
+  @Get('sourcemaps')
+  async listSourceMaps(@Query('apikey') apikey: string) {
+    return this.sourceMapService.listByApikey(apikey);
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '删除某个 SourceMap 文件' })
+  @ApiQuery({ name: 'apikey', description: '项目 apikey' })
+  @ApiQuery({ name: 'fileName', description: 'JS 文件名 (不含 .map 后缀)' })
+  @Delete('sourcemap')
+  async deleteSourceMap(
+    @Query('apikey') apikey: string,
+    @Query('fileName') fileName: string,
+  ) {
+    await this.sourceMapService.deleteMapFile(apikey, fileName);
+    return { message: '删除成功' };
   }
 }

@@ -157,13 +157,13 @@ model RecordScreen {
 }
 
 // ============================================================
-// SourceMap 文件表 (前端 CI/CD 上传，按 fileName+apikey 唯一)
+// SourceMap 元数据表 (前端 CI/CD 上传，内容存 MinIO，此表仅记录索引)
 // ============================================================
 model SourceMapFile {
   id        Int      @id @default(autoincrement())
   fileName  String   @db.VarChar(255)
   apikey    String   @db.VarChar(64)
-  content   String   @db.LongText
+  minioKey  String   @map("minio_key") @db.VarChar(512)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

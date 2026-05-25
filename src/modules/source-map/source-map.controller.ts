@@ -57,9 +57,14 @@ export class SourceMapController {
   @Public()
   @ApiOperation({ summary: '获取 JS SourceMap 文件' })
   @ApiQuery({ name: 'fileName', description: 'JS 文件名 (不含 .map 后缀)' })
+  @ApiQuery({ name: 'apikey', description: '项目 apikey', required: false })
   @Get('getmap')
-  async getMap(@Query('fileName') fileName: string, @Res() res: Response) {
-    const content = await this.sourceMapService.readMapFile(fileName);
+  async getMap(
+    @Query('fileName') fileName: string,
+    @Query('apikey') apikey: string,
+    @Res() res: Response,
+  ) {
+    const content = await this.sourceMapService.readMapFile(fileName, apikey);
     res.setHeader('Content-Type', 'application/json');
     res.send(content);
   }

@@ -1,31 +1,25 @@
-import { Controller, Post, Req, Body, HttpCode } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { Controller, Post, Req, Body, HttpCode, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Request } from 'express';
 import { ReportService } from './report.service';
 import { ReportDataDto } from './dto/report-data.dto';
+import { Public } from '../../common/decorators/public.decorator';
+import { ApiKeyAuthGuard } from '../../common/guards/apikey-auth.guard';
+import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 
 @ApiTags('数据上报')
-@ApiBearerAuth()
 @Controller()
 export class ReportController {
   constructor(private reportService: ReportService) {}
 
-  /**
-   * SDK 数据上报入口
-   *
-   * 兼容两种上报方式：
-   * 1. 普通 JSON POST (录屏/大数据)
-   * 2. navigator.sendBeacon 发出的 text/plain 流 (性能/错误/白屏)
-   *    — main.ts 已配置 express.json 接受 text/plain Content-Type，
-   *      所以 sendBeacon 数据同样通过 @Body() 可以获取
-   */
+  @Public()
+  @UseGuards(RateLimitGuard, ApiKeyAuthGuard)
   @ApiOperation({ summary: '数据上报 (SDK → 服务端)' })
   @Post('reportData')
   @HttpCode(200)
   async reportData(@Body() body: any, @Req() req: Request): Promise<any> {
     let data: ReportDataDto = body;
 
-    // body 为空时尝试从 rawBody 读取 (理论上 main.ts 的配置已覆盖此路径)
     if (!data || Object.keys(data).length === 0) {
       const raw = (req as any).rawBody;
       if (raw) {

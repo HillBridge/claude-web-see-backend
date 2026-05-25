@@ -8,20 +8,36 @@ import { PrismaService } from '@shared/prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 
+function serializeOrigins(origins?: string[]): string {
+  return JSON.stringify(origins ?? []);
+}
+
+function deserializeProject(p: any) {
+  if (!p) return p;
+  try {
+    p.allowedOrigins = JSON.parse(p.allowedOrigins ?? '[]');
+  } catch {
+    p.allowedOrigins = [];
+  }
+  return p;
+}
+
 @Injectable()
 export class ProjectsService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateProjectDto, ownerId: number) {
     const apikey = uuidv4().replace(/-/g, '');
-    return this.prisma.project.create({
+    const project = await this.prisma.project.create({
       data: {
         name: dto.name,
         description: dto.description,
+        allowedOrigins: serializeOrigins(dto.allowedOrigins),
         apikey,
         ownerId,
       },
     });
+    return deserializeProject(project);
   }
 
   async findAll(ownerId: number, isAdmin: boolean, page = 1, pageSize = 20) {
@@ -41,7 +57,7 @@ export class ProjectsService {
       }),
       this.prisma.project.count({ where }),
     ]);
-    return { list, total, page, pageSize };
+    return { list: list.map(deserializeProject), total, page, pageSize };
   }
 
   async findOne(id: number, userId: number, isAdmin: boolean) {
@@ -55,7 +71,7 @@ export class ProjectsService {
     if (!isAdmin && project.ownerId !== userId) {
       throw new ForbiddenException('无权访问此项目');
     }
-    return project;
+    return deserializeProject(project);
   }
 
   async update(
@@ -65,10 +81,12 @@ export class ProjectsService {
     isAdmin: boolean,
   ) {
     await this.findOne(id, userId, isAdmin);
-    return this.prisma.project.update({
-      where: { id },
-      data: dto,
-    });
+    const data: any = { ...dto };
+    if (dto.allowedOrigins !== undefined) {
+      data.allowedOrigins = serializeOrigins(dto.allowedOrigins);
+    }
+    const project = await this.prisma.project.update({ where: { id }, data });
+    return deserializeProject(project);
   }
 
   async remove(id: number, userId: number, isAdmin: boolean) {
@@ -86,5 +104,11 @@ export class ProjectsService {
       data: { apikey },
       select: { id: true, name: true, apikey: true },
     });
+  }
+
+  /** 根据 apikey 查询项目（用于上报接口验证），不抛异常 */
+  async findByApikey(apikey: string) {
+    const project = await this.prisma.project.findUnique({ where: { apikey } });
+    return deserializeProject(project);
   }
 }

@@ -41,13 +41,14 @@ model User {
 // 项目表 (apikey 管理)
 // ============================================================
 model Project {
-  id          Int      @id @default(autoincrement())
-  name        String   @db.VarChar(100)
-  apikey      String   @unique @db.VarChar(64)
-  description String?  @db.VarChar(255)
-  ownerId     Int      @map("owner_id")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id             Int      @id @default(autoincrement())
+  name           String   @db.VarChar(100)
+  apikey         String   @unique @db.VarChar(64)
+  description    String?  @db.VarChar(255)
+  allowedOrigins String   @default("[]") @map("allowed_origins") @db.VarChar(2000)
+  ownerId        Int      @map("owner_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 

@@ -1,20 +1,34 @@
-import { IsOptional, IsString, IsNumber, IsArray, IsObject } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsOptional, IsString, IsNumber, IsArray, IsNotEmpty,
+  IsIn, ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+const REPORT_TYPES = [
+  'performance', 'recordScreen', 'whiteScreen',
+  'error', 'unhandledrejection', 'resourceError', 'httpError',
+];
 
 export class BreadcrumbDto {
   @IsOptional() @IsString() category?: string;
   @IsOptional() data?: any;
   @IsOptional() @IsString() status?: string;
-  @IsOptional() time?: number;
+  @IsOptional() @IsNumber() time?: number;
   @IsOptional() @IsString() message?: string;
 }
 
 export class ReportDataDto {
-  /** performance | recordScreen | whiteScreen | error | unhandledrejection | resourceError | httpError */
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty({ enum: REPORT_TYPES })
+  @IsNotEmpty()
   @IsString()
-  type?: string;
+  @IsIn(REPORT_TYPES)
+  type: string;
+
+  @ApiProperty({ description: '项目 apikey' })
+  @IsNotEmpty()
+  @IsString()
+  apikey: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -28,12 +42,8 @@ export class ReportDataDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsNumber()
   time?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  apikey?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -49,7 +59,7 @@ export class ReportDataDto {
   @IsOptional()
   deviceInfo?: any;
 
-  // ── 错误字段 ───────────────────────────────────────────────
+  // ── 错误字段 ──────────────────────────────────────────────
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -62,10 +72,12 @@ export class ReportDataDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsNumber()
   lineno?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsNumber()
   colno?: number;
 
   @ApiPropertyOptional()
@@ -81,52 +93,25 @@ export class ReportDataDto {
   @ApiPropertyOptional({ type: [BreadcrumbDto] })
   @IsOptional()
   @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BreadcrumbDto)
   breadcrumb?: BreadcrumbDto[];
 
-  // ── 录屏字段 ───────────────────────────────────────────────
+  // ── 录屏字段 ──────────────────────────────────────────────
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   events?: string;
 
-  // ── 性能字段 ───────────────────────────────────────────────
-  @ApiPropertyOptional()
-  @IsOptional()
-  fp?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  fcp?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  lcp?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  fid?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  cls?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  ttfb?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  dns?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  tcp?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  ssl?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  loadTime?: number;
+  // ── 性能字段 ──────────────────────────────────────────────
+  @ApiPropertyOptional() @IsOptional() @IsNumber() fp?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() fcp?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() lcp?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() fid?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() cls?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() ttfb?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() dns?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() tcp?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() ssl?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() loadTime?: number;
 }

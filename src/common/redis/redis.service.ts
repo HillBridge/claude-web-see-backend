@@ -6,6 +6,10 @@ import { REDIS_CLIENT } from './redis.constants';
 export class RedisService {
   constructor(@Inject(REDIS_CLIENT) private readonly client: Redis) {}
 
+  get redisClient(): Redis {
+    return this.client;
+  }
+
   async addToken(userId: number, jti: string, ttlSeconds: number): Promise<void> {
     await this.client.set(`auth:token:${userId}:${jti}`, '1', 'EX', ttlSeconds);
   }

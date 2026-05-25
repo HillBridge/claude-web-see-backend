@@ -16,6 +16,7 @@ import { LoginDto } from './dto/login.dto';
 import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Roles } from '@/common/decorators/roles.decorator';
+import { AuthRateLimitGuard } from '@/common/guards/auth-rate-limit.guard';
 
 @ApiTags('认证')
 @Controller('auth')
@@ -24,6 +25,7 @@ export class AuthController {
 
   @ApiOperation({ summary: '用户注册' })
   @Public()
+  @UseGuards(AuthRateLimitGuard)
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
@@ -31,7 +33,7 @@ export class AuthController {
 
   @ApiOperation({ summary: '用户登录 — 返回 JWT Token' })
   @Public()
-  @UseGuards(LocalAuthGuard)
+  @UseGuards(AuthRateLimitGuard, LocalAuthGuard)
   @Post('login')
   login(@Body() _dto: LoginDto, @Request() req: any) {
     // LocalAuthGuard 已经把验证通过的 user 挂在 req.user 上

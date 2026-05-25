@@ -8,6 +8,7 @@ import { LocalStrategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { RedisModule } from '@/common/redis/redis.module';
+import { AuthRateLimitGuard } from '@/common/guards/auth-rate-limit.guard';
 
 @Module({
   imports: [
@@ -25,7 +26,7 @@ import { RedisModule } from '@/common/redis/redis.module';
       }),
     }),
   ],
-  providers: [AuthService, LocalStrategy, JwtStrategy],
+  providers: [AuthService, LocalStrategy, JwtStrategy, AuthRateLimitGuard],
   controllers: [AuthController],
   exports: [AuthService],
 })

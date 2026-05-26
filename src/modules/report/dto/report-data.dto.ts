@@ -68,17 +68,17 @@ export class ReportDataDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  filename?: string;
+  fileName?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
-  lineno?: number;
+  line?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
-  colno?: number;
+  column?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

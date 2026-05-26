@@ -40,9 +40,9 @@ export class ReportService {
         deviceInfo: data.deviceInfo ?? undefined,
         recordScreenId: data.recordScreenId,
         stack: data.stack,
-        filename: data.filename,
-        lineNo: data.lineno ? Number(data.lineno) : null,
-        colNo: data.colno ? Number(data.colno) : null,
+        filename: data.fileName,
+        lineNo: data.line ? Number(data.line) : null,
+        colNo: data.column ? Number(data.column) : null,
       },
     });
 

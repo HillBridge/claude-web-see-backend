@@ -32,15 +32,7 @@ export class ErrorsService {
     ]);
 
     return {
-      list: list.map((item) => ({
-        ...item,
-        // 兼容前端 sourcemap.js 期望的字段名
-        fileName: item.filename,
-        line: item.lineNo,
-        column: item.colNo,
-        userId: item.monitorUserId,
-        breadcrumbs: item.breadcrumbs,
-      })),
+      list: list.map((item) => this.mapErrorItem(item)),
       total,
       page,
       pageSize,
@@ -48,9 +40,22 @@ export class ErrorsService {
   }
 
   async findOne(id: number) {
-    return this.prisma.errorReport.findUnique({
+    const item = await this.prisma.errorReport.findUnique({
       where: { id },
       include: { breadcrumbs: true },
     });
+    if (!item) return null;
+    return this.mapErrorItem(item);
+  }
+
+  private mapErrorItem(item: any) {
+    const { filename, lineNo, colNo, monitorUserId, ...rest } = item;
+    return {
+      ...rest,
+      fileName: filename,
+      line: lineNo,
+      column: colNo,
+      userId: monitorUserId,
+    };
   }
 }

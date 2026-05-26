@@ -63,7 +63,6 @@ model Project {
 model ErrorReport {
   id             Int      @id @default(autoincrement())
   type           String   @db.VarChar(50)
-  subType        String?  @map("sub_type") @db.VarChar(50)
   message        String?  @db.Text
   pageUrl        String?  @map("page_url") @db.VarChar(500)
   time           BigInt?
@@ -72,10 +71,6 @@ model ErrorReport {
   sdkVersion     String?  @map("sdk_version") @db.VarChar(20)
   deviceInfo     Json?    @map("device_info")
   recordScreenId String?  @map("record_screen_id") @db.VarChar(64)
-  stack          String?  @db.Text
-  filename       String?  @db.VarChar(500)
-  lineNo         Int?     @map("line_no")
-  colNo          Int?     @map("col_no")
   createdAt      DateTime @default(now()) @map("created_at")
 
   breadcrumbs Breadcrumb[]

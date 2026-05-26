@@ -33,11 +33,6 @@ export class ReportDataDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  subType?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
   pageUrl?: string;
 
   @ApiPropertyOptional()
@@ -64,26 +59,6 @@ export class ReportDataDto {
   @IsOptional()
   @IsString()
   message?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  fileName?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  line?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  column?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  stack?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -30,7 +30,6 @@ export class ReportService {
     const errorReport = await this.prisma.errorReport.create({
       data: {
         type: data.type,
-        subType: data.subType,
         message: data.message,
         pageUrl: data.pageUrl,
         time: data.time ? BigInt(data.time) : null,
@@ -39,10 +38,6 @@ export class ReportService {
         sdkVersion: data.sdkVersion,
         deviceInfo: data.deviceInfo ?? undefined,
         recordScreenId: data.recordScreenId,
-        stack: data.stack,
-        filename: data.fileName,
-        lineNo: data.line ? Number(data.line) : null,
-        colNo: data.column ? Number(data.column) : null,
       },
     });
 

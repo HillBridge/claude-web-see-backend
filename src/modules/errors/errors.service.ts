@@ -49,12 +49,9 @@ export class ErrorsService {
   }
 
   private mapErrorItem(item: any) {
-    const { filename, lineNo, colNo, monitorUserId, ...rest } = item;
+    const { monitorUserId, ...rest } = item;
     return {
       ...rest,
-      fileName: filename,
-      line: lineNo,
-      column: colNo,
       userId: monitorUserId,
     };
   }

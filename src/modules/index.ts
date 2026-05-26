@@ -7,3 +7,4 @@ export { PerformanceModule }  from './performance/performance.module';
 export { RecordScreenModule } from './record-screen/record-screen.module';
 export { WhiteScreenModule }  from './white-screen/white-screen.module';
 export { SourceMapModule }    from './source-map/source-map.module';
+export { CleanupModule }      from './cleanup/cleanup.module';

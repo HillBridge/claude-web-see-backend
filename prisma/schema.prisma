@@ -168,6 +168,32 @@ model SourceMapFile {
 }
 
 // ============================================================
+// 性能日聚合统计表（原始数据 30 天后归档到此，最长保留 1 年）
+// ============================================================
+model PerformanceDailyStat {
+  id          Int      @id @default(autoincrement())
+  statDate    DateTime @map("stat_date") @db.Date
+  apikey      String   @db.VarChar(64)
+  sampleCount Int      @map("sample_count")
+  avgFp       Decimal? @map("avg_fp") @db.Decimal(10, 2)
+  avgFcp      Decimal? @map("avg_fcp") @db.Decimal(10, 2)
+  avgLcp      Decimal? @map("avg_lcp") @db.Decimal(10, 2)
+  avgFid      Decimal? @map("avg_fid") @db.Decimal(10, 2)
+  avgCls      Decimal? @map("avg_cls") @db.Decimal(10, 4)
+  avgTtfb     Decimal? @map("avg_ttfb") @db.Decimal(10, 2)
+  avgDns      Decimal? @map("avg_dns") @db.Decimal(10, 2)
+  avgTcp      Decimal? @map("avg_tcp") @db.Decimal(10, 2)
+  avgSsl      Decimal? @map("avg_ssl") @db.Decimal(10, 2)
+  avgLoadTime Decimal? @map("avg_load_time") @db.Decimal(10, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([statDate, apikey])
+  @@index([apikey])
+  @@index([statDate])
+  @@map("performance_daily_stats")
+}
+
+// ============================================================
 // 白屏检测数据表
 // ============================================================
 model WhiteScreen {

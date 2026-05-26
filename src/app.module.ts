@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import configuration from './config/configuration';
 import { HttpExceptionFilter }    from './common/filters/http-exception.filter';
@@ -19,6 +20,7 @@ import {
   RecordScreenModule,
   WhiteScreenModule,
   SourceMapModule,
+  CleanupModule,
 } from './modules';
 
 @Module({
@@ -28,6 +30,7 @@ import {
       load: [configuration],
       envFilePath: [`.env.${process.env.NODE_ENV || 'development'}`, '.env'],
     }),
+    ScheduleModule.forRoot(),
     RedisModule,
     SharedModule,
     AuthModule,
@@ -39,6 +42,7 @@ import {
     RecordScreenModule,
     WhiteScreenModule,
     SourceMapModule,
+    CleanupModule,
   ],
   providers: [
     { provide: APP_GUARD,       useClass: JwtAuthGuard },         // 1. 先验证 JWT

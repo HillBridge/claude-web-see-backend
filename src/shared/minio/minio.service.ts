@@ -32,6 +32,24 @@ export class MinioService implements OnModuleInit {
       await this.client.makeBucket(this.bucket);
       this.logger.log(`MinIO bucket "${this.bucket}" created`);
     }
+    await this.applyLifecycle();
+  }
+
+  private async applyLifecycle() {
+    try {
+      await this.client.setBucketLifecycle(this.bucket, {
+        Rule: [
+          {
+            ID: 'expire-sourcemaps-180d',
+            Status: 'Enabled',
+            Filter: { Prefix: '' },
+            Expiration: { Days: 180 },
+          },
+        ],
+      });
+    } catch (err) {
+      this.logger.warn(`MinIO lifecycle 设置失败（不影响启动）: ${err?.message}`);
+    }
   }
 
   async putObject(objectName: string, data: Buffer, contentType = 'application/json') {

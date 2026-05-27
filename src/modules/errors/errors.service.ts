@@ -49,10 +49,12 @@ export class ErrorsService {
   }
 
   private mapErrorItem(item: any) {
-    const { monitorUserId, ...rest } = item;
+    const { monitorUserId, lineNo, colNo, ...rest } = item;
     return {
       ...rest,
       userId: monitorUserId,
+      line: lineNo,
+      column: colNo,
     };
   }
 }

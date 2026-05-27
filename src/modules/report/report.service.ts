@@ -38,6 +38,9 @@ export class ReportService {
         sdkVersion: data.sdkVersion,
         deviceInfo: data.deviceInfo ?? undefined,
         recordScreenId: data.recordScreenId,
+        fileName: (data as any).fileName ?? (data as any).filename ?? null,
+        lineNo: (data as any).lineNo ?? (data as any).line ?? null,
+        colNo: (data as any).colNo ?? (data as any).column ?? null,
       },
     });
 

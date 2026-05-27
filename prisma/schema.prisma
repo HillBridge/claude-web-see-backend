@@ -71,6 +71,9 @@ model ErrorReport {
   sdkVersion     String?  @map("sdk_version") @db.VarChar(20)
   deviceInfo     Json?    @map("device_info")
   recordScreenId String?  @map("record_screen_id") @db.VarChar(64)
+  fileName       String?  @map("filename") @db.VarChar(255)
+  lineNo         Int?     @map("line_no")
+  colNo          Int?     @map("col_no")
   createdAt      DateTime @default(now()) @map("created_at")
 
   breadcrumbs Breadcrumb[]

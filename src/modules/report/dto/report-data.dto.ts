@@ -63,6 +63,21 @@ export class ReportDataDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  fileName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  lineNo?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  colNo?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   recordScreenId?: string;
 
   @ApiPropertyOptional({ type: [BreadcrumbDto] })

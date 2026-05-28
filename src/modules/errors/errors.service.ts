@@ -8,12 +8,21 @@ export class ErrorsService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(query: QueryErrorDto): Promise<IPageResult<any>> {
-    const { page = 1, pageSize = 20, apikey, type, startTime, endTime } = query;
+    const { page = 1, pageSize = 20, apikey, projectId, type, userId, startTime, endTime } = query;
     const skip = (page - 1) * pageSize;
 
     const where: any = {};
-    if (apikey) where.apikey = apikey;
+
+    if (projectId) {
+      const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { apikey: true } });
+      if (project) where.apikey = project.apikey;
+      else return { list: [], total: 0, page, pageSize };
+    } else if (apikey) {
+      where.apikey = apikey;
+    }
+
     if (type) where.type = type;
+    if (userId) where.monitorUserId = userId;
     if (startTime || endTime) {
       where.createdAt = {};
       if (startTime) where.createdAt.gte = new Date(startTime);

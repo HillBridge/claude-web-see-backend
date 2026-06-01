@@ -40,6 +40,7 @@ export class CleanupService {
     await this.aggregatePerformance();
     await this.deleteOldPerformanceRaw();
     await this.deleteOldErrors();
+    await this.deleteOldErrorGroups();
     await this.deleteOldRecordScreens();
     await this.deleteOldWhiteScreens();
     await this.deleteOldPerformanceStats();
@@ -126,6 +127,15 @@ export class CleanupService {
       where: { createdAt: { lt: cutoff } },
     });
     this.logger.log(`删除错误上报: ${count} 条（>${RETENTION.errorReport}天）`);
+  }
+
+  // ErrorGroup: 删除最近一次发生已超过保留期的分组
+  private async deleteOldErrorGroups() {
+    const cutoff = daysAgo(RETENTION.errorReport);
+    const { count } = await this.prisma.errorGroup.deleteMany({
+      where: { lastSeen: { lt: cutoff } },
+    });
+    this.logger.log(`删除错误分组: ${count} 组（最近发生>${RETENTION.errorReport}天）`);
   }
 
   private async deleteOldRecordScreens() {

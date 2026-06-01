@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@shared/prisma/prisma.service';
 import { ReportDataDto } from './dto/report-data.dto';
+import { buildFingerprint } from './utils/fingerprint';
 
 @Injectable()
 export class ReportService {
@@ -27,20 +28,53 @@ export class ReportService {
   }
 
   private async saveError(data: ReportDataDto) {
+    const apikey = data.apikey || 'unknown';
+    const fileName = (data as any).fileName ?? (data as any).filename ?? null;
+    const lineNo = (data as any).lineNo ?? (data as any).line ?? null;
+    const colNo = (data as any).colNo ?? (data as any).column ?? null;
+
+    // 1) 先按指纹归并到错误分组(去重 + 累计次数)
+    const fingerprint = buildFingerprint({
+      type: data.type,
+      message: data.message,
+      fileName,
+      lineNo,
+      colNo,
+    });
+
+    const group = await this.prisma.errorGroup.upsert({
+      where: { apikey_fingerprint: { apikey, fingerprint } },
+      create: {
+        apikey,
+        fingerprint,
+        type: data.type,
+        message: data.message ?? null,
+        fileName,
+        lineNo,
+        colNo,
+      },
+      update: {
+        count: { increment: 1 },
+        lastSeen: new Date(),
+      },
+    });
+
+    // 2) 仍保留每次发生的明细, 挂到对应分组下
     const errorReport = await this.prisma.errorReport.create({
       data: {
         type: data.type,
         message: data.message,
         pageUrl: data.pageUrl,
         time: data.time ? BigInt(data.time) : null,
-        apikey: data.apikey || 'unknown',
+        apikey,
         monitorUserId: data.userId,
         sdkVersion: data.sdkVersion,
         deviceInfo: data.deviceInfo ?? undefined,
         recordScreenId: data.recordScreenId,
-        fileName: (data as any).fileName ?? (data as any).filename ?? null,
-        lineNo: (data as any).lineNo ?? (data as any).line ?? null,
-        colNo: (data as any).colNo ?? (data as any).column ?? null,
+        fileName,
+        lineNo,
+        colNo,
+        errorGroupId: group.id,
       },
     });
 

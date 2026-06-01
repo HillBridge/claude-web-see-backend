@@ -74,15 +74,46 @@ model ErrorReport {
   fileName       String?  @map("filename") @db.VarChar(255)
   lineNo         Int?     @map("line_no")
   colNo          Int?     @map("col_no")
+  errorGroupId   Int?     @map("error_group_id")
   createdAt      DateTime @default(now()) @map("created_at")
 
   breadcrumbs Breadcrumb[]
+  errorGroup  ErrorGroup? @relation(fields: [errorGroupId], references: [id], onDelete: SetNull)
 
   @@index([apikey])
   @@index([type])
   @@index([recordScreenId])
+  @@index([errorGroupId])
   @@index([createdAt])
   @@map("error_reports")
+}
+
+// ============================================================
+// 错误聚合分组表 (同一 fingerprint 归为一组, 用于去重/统计)
+// fingerprint = sha1(type|归一化message|fileName|lineNo|colNo)
+// ============================================================
+model ErrorGroup {
+  id          Int      @id @default(autoincrement())
+  apikey      String   @db.VarChar(64)
+  fingerprint String   @db.VarChar(64)
+  type        String   @db.VarChar(50)
+  message     String?  @db.Text
+  fileName    String?  @map("filename") @db.VarChar(255)
+  lineNo      Int?     @map("line_no")
+  colNo       Int?     @map("col_no")
+  count       Int      @default(1)
+  firstSeen   DateTime @default(now()) @map("first_seen")
+  lastSeen    DateTime @default(now()) @map("last_seen")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  reports ErrorReport[]
+
+  @@unique([apikey, fingerprint])
+  @@index([apikey])
+  @@index([type])
+  @@index([lastSeen])
+  @@map("error_groups")
 }
 
 // ============================================================

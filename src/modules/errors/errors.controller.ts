@@ -22,6 +22,20 @@ export class ErrorsController {
     return this.errorsService.findAll(query);
   }
 
+  @ApiOperation({ summary: '错误分组列表（去重聚合 + 分页）' })
+  @ApiBearerAuth()
+  @Get('errorGroups')
+  findGroups(@Query() query: QueryErrorDto) {
+    return this.errorsService.findGroups(query);
+  }
+
+  @ApiOperation({ summary: '某错误分组下的发生明细（分页）' })
+  @ApiBearerAuth()
+  @Get('errorGroups/:id/reports')
+  findGroupReports(@Param('id', ParseIntPipe) id: number, @Query() query: QueryErrorDto) {
+    return this.errorsService.findGroupReports(id, query);
+  }
+
   @ApiOperation({ summary: '错误详情（含用户行为轨迹）' })
   @ApiBearerAuth()
   @Get('errors/:id')

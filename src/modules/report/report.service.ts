@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@shared/prisma/prisma.service';
 import { ReportDataDto } from './dto/report-data.dto';
-import { buildFingerprint } from './utils/fingerprint';
+import { buildFingerprint, truncate } from './utils/fingerprint';
 
 @Injectable()
 export class ReportService {
@@ -29,7 +29,11 @@ export class ReportService {
 
   private async saveError(data: ReportDataDto) {
     const apikey = data.apikey || 'unknown';
-    const fileName = (data as any).fileName ?? (data as any).filename ?? null;
+    const fileName = truncate(
+      (data as any).fileName ?? (data as any).filename ?? null,
+      500,
+    );
+    const pageUrl = truncate(data.pageUrl, 500);
     const lineNo = (data as any).lineNo ?? (data as any).line ?? null;
     const colNo = (data as any).colNo ?? (data as any).column ?? null;
 
@@ -64,7 +68,7 @@ export class ReportService {
       data: {
         type: data.type,
         message: data.message,
-        pageUrl: data.pageUrl,
+        pageUrl,
         time: data.time ? BigInt(data.time) : null,
         apikey,
         monitorUserId: data.userId,

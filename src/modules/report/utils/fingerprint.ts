@@ -39,3 +39,14 @@ export function buildFingerprint(input: FingerprintInput): string {
   ].join('|');
   return createHash('sha1').update(raw).digest('hex');
 }
+
+/**
+ * 把字符串截断到列宽以内, 避免超长值导致 P2000 (value too long) 丢失整条上报。
+ */
+export function truncate(
+  val: string | null | undefined,
+  max: number,
+): string | null {
+  if (val == null) return null;
+  return val.length > max ? val.slice(0, max) : val;
+}

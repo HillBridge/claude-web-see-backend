@@ -71,7 +71,7 @@ model ErrorReport {
   sdkVersion     String?  @map("sdk_version") @db.VarChar(20)
   deviceInfo     Json?    @map("device_info")
   recordScreenId String?  @map("record_screen_id") @db.VarChar(64)
-  fileName       String?  @map("filename") @db.VarChar(255)
+  fileName       String?  @map("filename") @db.VarChar(500)
   lineNo         Int?     @map("line_no")
   colNo          Int?     @map("col_no")
   errorGroupId   Int?     @map("error_group_id")
@@ -98,7 +98,7 @@ model ErrorGroup {
   fingerprint String   @db.VarChar(64)
   type        String   @db.VarChar(50)
   message     String?  @db.Text
-  fileName    String?  @map("filename") @db.VarChar(255)
+  fileName    String?  @map("filename") @db.VarChar(500)
   lineNo      Int?     @map("line_no")
   colNo       Int?     @map("col_no")
   count       Int      @default(1)

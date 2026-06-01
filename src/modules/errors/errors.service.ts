@@ -7,6 +7,11 @@ import { QueryErrorDto } from './dto/query-error.dto';
 export class ErrorsService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * 错误列表(去重视图): 一个错误一行 + 发生次数。
+   * 每行取该分组「最近一次发生」的完整明细(message/pageUrl/time/userId/行列/breadcrumb 都在),
+   * 再叠加 count / firstSeen / lastSeen / groupId, 前端原有列零改动即可显示去重结果。
+   */
   async findAll(query: QueryErrorDto): Promise<IPageResult<any>> {
     const { page = 1, pageSize = 20, apikey, projectId, type, userId, startTime, endTime } = query;
     const skip = (page - 1) * pageSize;
@@ -22,29 +27,50 @@ export class ErrorsService {
     }
 
     if (type) where.type = type;
-    if (userId) where.monitorUserId = userId;
+    // userId 不是分组列(已进指纹), 通过组内明细过滤
+    if (userId) where.reports = { some: { monitorUserId: userId } };
     if (startTime || endTime) {
-      where.createdAt = {};
-      if (startTime) where.createdAt.gte = new Date(startTime);
-      if (endTime) where.createdAt.lte = new Date(endTime);
+      where.lastSeen = {};
+      if (startTime) where.lastSeen.gte = new Date(startTime);
+      if (endTime) where.lastSeen.lte = new Date(endTime);
     }
 
-    const [list, total] = await Promise.all([
-      this.prisma.errorReport.findMany({
+    const [groups, total] = await Promise.all([
+      this.prisma.errorGroup.findMany({
         where,
         skip,
         take: pageSize,
-        include: { breadcrumbs: true },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { lastSeen: 'desc' },
+        include: {
+          reports: {
+            take: 1,
+            orderBy: { createdAt: 'desc' },
+            include: { breadcrumbs: true },
+          },
+        },
       }),
-      this.prisma.errorReport.count({ where }),
+      this.prisma.errorGroup.count({ where }),
     ]);
 
     return {
-      list: list.map((item) => this.mapErrorItem(item)),
+      list: groups.map((g) => this.mapGroupedRow(g)),
       total,
       page,
       pageSize,
+    };
+  }
+
+  /** 分组 + 其最近一次明细 → 兼容旧列表结构的一行 */
+  private mapGroupedRow(g: any) {
+    const latest = g.reports?.[0];
+    const base = latest ? this.mapErrorItem(latest) : this.mapGroupItem(g);
+    return {
+      ...base,
+      id: latest?.id ?? base.id, // 保持「查看详情」按明细 id 跳转可用
+      groupId: g.id,
+      count: g.count,
+      firstSeen: g.firstSeen,
+      lastSeen: g.lastSeen,
     };
   }
 

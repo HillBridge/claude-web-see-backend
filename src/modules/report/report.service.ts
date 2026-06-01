@@ -41,9 +41,7 @@ export class ReportService {
     const fingerprint = buildFingerprint({
       type: data.type,
       message: data.message,
-      fileName,
-      lineNo,
-      colNo,
+      userId: data.userId,
     });
 
     const group = await this.prisma.errorGroup.upsert({

@@ -19,6 +19,7 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
     "backfill:error-groups": "ts-node scripts/backfill-error-groups.ts",
+    "regroup:error-groups": "ts-node scripts/backfill-error-groups.ts --rebuild",
     "minio": "bash scripts/start-minio.sh"
   },
   "dependencies": {

@@ -21,21 +21,22 @@ export function normalizeMessage(message?: string | null): string {
 export interface FingerprintInput {
   type: string;
   message?: string | null;
-  fileName?: string | null;
-  lineNo?: number | null;
-  colNo?: number | null;
+  userId?: string | null;
 }
 
 /**
- * 根据错误关键特征计算 sha1 指纹, 同 apikey 下同指纹的错误归为一组。
+ * 根据错误关键特征计算 sha1 指纹, 同 apikey(项目) 下同指纹的错误归为一组。
+ *
+ * 维度: type + 归一化message + userId。
+ *   - 不含 fileName/lineNo/colNo: 生产构建文件名带 contenthash、压缩后行列号每次
+ *     发布都变, 带上会导致同一错误每次发版被拆成新组。
+ *   - 项目维度由分组表的 @@unique([apikey, fingerprint]) 保证, 无需进指纹。
  */
 export function buildFingerprint(input: FingerprintInput): string {
   const raw = [
     input.type ?? '',
     normalizeMessage(input.message),
-    input.fileName ?? '',
-    input.lineNo ?? '',
-    input.colNo ?? '',
+    input.userId ?? '',
   ].join('|');
   return createHash('sha1').update(raw).digest('hex');
 }

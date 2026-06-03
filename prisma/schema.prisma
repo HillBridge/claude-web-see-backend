@@ -90,7 +90,9 @@ model ErrorReport {
 
 // ============================================================
 // 错误聚合分组表 (同一 fingerprint 归为一组, 用于去重/统计)
-// fingerprint = sha1(type|归一化message|fileName|lineNo|colNo)
+// fingerprint = sha1(type|归一化message|userId)
+// 不含 fileName/lineNo/colNo: 生产构建文件名带 contenthash、压缩后行列号每次发版都变,
+// 带上会导致同一错误每次发版被拆成新组; 项目维度由 @@unique([apikey, fingerprint]) 保证。
 // ============================================================
 model ErrorGroup {
   id          Int      @id @default(autoincrement())

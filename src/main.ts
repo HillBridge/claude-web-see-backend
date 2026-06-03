@@ -23,23 +23,27 @@ async function bootstrap() {
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 
   // ── Body Parser (支持 JSON + text/plain for sendBeacon) ────
+  // 体积上限可经 BODY_LIMIT 配置(默认 10mb);录屏 events 较大但 50mb 易被滥用做 DoS
+  const bodyLimit = process.env.BODY_LIMIT || '10mb';
   app.use(
     express.json({
       type: ['application/json', 'text/plain'],
-      limit: '50mb',
+      limit: bodyLimit,
     }),
   );
   app.use(
     express.urlencoded({
       extended: true,
-      limit: '50mb',
-      parameterLimit: 50000,
+      limit: bodyLimit,
+      parameterLimit: 10000,
     }),
   );
 
   // ── CORS ───────────────────────────────────────────────────
+  // CORS_ORIGINS 为逗号分隔白名单;未配置时回退 '*'(兼容旧行为,生产建议配置)
+  const corsOrigins = process.env.CORS_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean);
   app.enableCors({
-    origin: '*',
+    origin: corsOrigins && corsOrigins.length > 0 ? corsOrigins : '*',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
@@ -54,6 +58,7 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
+      forbidNonWhitelisted: true, // 出现未声明字段直接拒绝,防止脏数据/注入
       transform: true,
       transformOptions: { enableImplicitConversion: true },
     }),

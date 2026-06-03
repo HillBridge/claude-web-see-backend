@@ -49,7 +49,7 @@ export class AuthController {
 
   @ApiOperation({ summary: '强制下线指定用户（仅管理员）' })
   @ApiBearerAuth()
-  @Roles('admin')
+  @Roles('ADMIN')
   @Post('force-logout/:userId')
   forceLogout(@Param('userId', ParseIntPipe) userId: number) {
     return this.authService.forceLogout(userId);

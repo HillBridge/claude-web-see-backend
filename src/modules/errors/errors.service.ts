@@ -77,7 +77,7 @@ export class ErrorsService {
   async findOne(id: number) {
     const item = await this.prisma.errorReport.findUnique({
       where: { id },
-      include: { breadcrumbs: true },
+      include: { breadcrumbs: true, errorGroup: true },
     });
     if (!item) return null;
     return this.mapErrorItem(item);
@@ -153,12 +153,18 @@ export class ErrorsService {
   }
 
   private mapErrorItem(item: any) {
-    const { monitorUserId, lineNo, colNo, ...rest } = item;
+    const { monitorUserId, lineNo, colNo, errorGroup, ...rest } = item;
     return {
       ...rest,
       userId: monitorUserId,
       line: lineNo,
       column: colNo,
+      // 叠加所属错误分组的去重统计(详情接口用)
+      ...(errorGroup && {
+        count: errorGroup.count,
+        firstSeen: errorGroup.firstSeen,
+        lastSeen: errorGroup.lastSeen,
+      }),
     };
   }
 }

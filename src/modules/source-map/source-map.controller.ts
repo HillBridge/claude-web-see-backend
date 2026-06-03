@@ -24,6 +24,9 @@ import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
 import * as path from 'path';
 import { Public } from '@/common/decorators/public.decorator';
+import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { assertApikeyAccess, TenantUser } from '@/common/utils/tenant-scope';
+import { PrismaService } from '@shared/prisma/prisma.service';
 import { SourceMapService } from './source-map.service';
 
 @ApiTags('SourceMap')
@@ -32,6 +35,7 @@ export class SourceMapController {
   constructor(
     private sourceMapService: SourceMapService,
     private configService: ConfigService,
+    private prisma: PrismaService,
   ) {}
 
   @Public()
@@ -75,7 +79,8 @@ export class SourceMapController {
   @ApiOperation({ summary: '查询某项目已上传的 SourceMap 列表' })
   @ApiQuery({ name: 'apikey', description: '项目 apikey' })
   @Get('sourcemaps')
-  async listSourceMaps(@Query('apikey') apikey: string) {
+  async listSourceMaps(@Query('apikey') apikey: string, @CurrentUser() user: TenantUser) {
+    await assertApikeyAccess(this.prisma, user, apikey);
     return this.sourceMapService.listByApikey(apikey);
   }
 
@@ -87,7 +92,9 @@ export class SourceMapController {
   async deleteSourceMap(
     @Query('apikey') apikey: string,
     @Query('fileName') fileName: string,
+    @CurrentUser() user: TenantUser,
   ) {
+    await assertApikeyAccess(this.prisma, user, apikey);
     await this.sourceMapService.deleteMapFile(apikey, fileName);
     return { message: '删除成功' };
   }

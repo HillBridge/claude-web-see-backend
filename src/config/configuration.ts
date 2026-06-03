@@ -1,3 +1,11 @@
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) {
+    throw new Error(`缺少必需的环境变量 ${name}，拒绝启动（不允许使用硬编码默认密钥）`);
+  }
+  return v;
+}
+
 export default () => ({
   app: {
     env: process.env.NODE_ENV || 'development',
@@ -5,7 +13,7 @@ export default () => ({
     name: process.env.APP_NAME || 'web-see-backend',
   },
   jwt: {
-    secret: process.env.JWT_SECRET || 'web-see-secret',
+    secret: requireEnv('JWT_SECRET'),
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
   database: {

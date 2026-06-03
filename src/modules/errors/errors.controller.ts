@@ -2,6 +2,8 @@ import { Controller, Get, Param, Query, ParseIntPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ErrorsService } from './errors.service';
 import { QueryErrorDto } from './dto/query-error.dto';
+import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { TenantUser } from '@/common/utils/tenant-scope';
 
 @ApiTags('错误数据')
 @ApiBearerAuth()
@@ -11,35 +13,39 @@ export class ErrorsController {
 
   @ApiOperation({ summary: '获取错误列表 (兼容旧接口)' })
   @Get('getErrorList')
-  getErrorListLegacy(@Query() query: QueryErrorDto) {
-    return this.errorsService.findAll(query);
+  getErrorListLegacy(@Query() query: QueryErrorDto, @CurrentUser() user: TenantUser) {
+    return this.errorsService.findAll(query, user);
   }
 
   @ApiOperation({ summary: '错误列表（分页 + 过滤）' })
   @ApiBearerAuth()
   @Get('errors')
-  findAll(@Query() query: QueryErrorDto) {
-    return this.errorsService.findAll(query);
+  findAll(@Query() query: QueryErrorDto, @CurrentUser() user: TenantUser) {
+    return this.errorsService.findAll(query, user);
   }
 
   @ApiOperation({ summary: '错误分组列表（去重聚合 + 分页）' })
   @ApiBearerAuth()
   @Get('errorGroups')
-  findGroups(@Query() query: QueryErrorDto) {
-    return this.errorsService.findGroups(query);
+  findGroups(@Query() query: QueryErrorDto, @CurrentUser() user: TenantUser) {
+    return this.errorsService.findGroups(query, user);
   }
 
   @ApiOperation({ summary: '某错误分组下的发生明细（分页）' })
   @ApiBearerAuth()
   @Get('errorGroups/:id/reports')
-  findGroupReports(@Param('id', ParseIntPipe) id: number, @Query() query: QueryErrorDto) {
-    return this.errorsService.findGroupReports(id, query);
+  findGroupReports(
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: QueryErrorDto,
+    @CurrentUser() user: TenantUser,
+  ) {
+    return this.errorsService.findGroupReports(id, query, user);
   }
 
   @ApiOperation({ summary: '错误详情（含用户行为轨迹）' })
   @ApiBearerAuth()
   @Get('errors/:id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.errorsService.findOne(id);
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: TenantUser) {
+    return this.errorsService.findOne(id, user);
   }
 }

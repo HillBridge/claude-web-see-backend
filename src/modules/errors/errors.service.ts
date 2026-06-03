@@ -2,6 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@shared/prisma/prisma.service';
 import { IPageResult } from '@/common/interfaces/page-result.interface';
 import { QueryErrorDto } from './dto/query-error.dto';
+import {
+  TenantUser,
+  resolveTenantApikeyFilter,
+  assertApikeyAccess,
+} from '@/common/utils/tenant-scope';
 
 @Injectable()
 export class ErrorsService {
@@ -12,19 +17,12 @@ export class ErrorsService {
    * 每行取该分组「最近一次发生」的完整明细(message/pageUrl/time/userId/行列/breadcrumb 都在),
    * 再叠加 count / firstSeen / lastSeen / groupId, 前端原有列零改动即可显示去重结果。
    */
-  async findAll(query: QueryErrorDto): Promise<IPageResult<any>> {
+  async findAll(query: QueryErrorDto, user: TenantUser): Promise<IPageResult<any>> {
     const { page = 1, pageSize = 20, apikey, projectId, type, userId, startTime, endTime } = query;
     const skip = (page - 1) * pageSize;
 
-    const where: any = {};
-
-    if (projectId) {
-      const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { apikey: true } });
-      if (project) where.apikey = project.apikey;
-      else return { list: [], total: 0, page, pageSize };
-    } else if (apikey) {
-      where.apikey = apikey;
-    }
+    // 按当前用户解析可访问的 apikey 范围(租户隔离)
+    const where: any = await resolveTenantApikeyFilter(this.prisma, user, { apikey, projectId });
 
     if (type) where.type = type;
     // userId 不是分组列(已进指纹), 通过组内明细过滤
@@ -74,29 +72,24 @@ export class ErrorsService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, user: TenantUser) {
     const item = await this.prisma.errorReport.findUnique({
       where: { id },
       include: { breadcrumbs: true, errorGroup: true },
     });
     if (!item) return null;
+    // 校验该错误所属项目归当前用户所有
+    await assertApikeyAccess(this.prisma, user, item.apikey);
     return this.mapErrorItem(item);
   }
 
   /** 错误分组列表(去重聚合视图: 一组一行, 含发生次数与首末时间) */
-  async findGroups(query: QueryErrorDto): Promise<IPageResult<any>> {
+  async findGroups(query: QueryErrorDto, user: TenantUser): Promise<IPageResult<any>> {
     const { page = 1, pageSize = 20, apikey, projectId, type, startTime, endTime } = query;
     const skip = (page - 1) * pageSize;
 
-    const where: any = {};
-
-    if (projectId) {
-      const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { apikey: true } });
-      if (project) where.apikey = project.apikey;
-      else return { list: [], total: 0, page, pageSize };
-    } else if (apikey) {
-      where.apikey = apikey;
-    }
+    // 按当前用户解析可访问的 apikey 范围(租户隔离)
+    const where: any = await resolveTenantApikeyFilter(this.prisma, user, { apikey, projectId });
 
     if (type) where.type = type;
     if (startTime || endTime) {
@@ -124,9 +117,17 @@ export class ErrorsService {
   }
 
   /** 某个错误分组下的发生明细(分页) */
-  async findGroupReports(groupId: number, query: QueryErrorDto): Promise<IPageResult<any>> {
+  async findGroupReports(groupId: number, query: QueryErrorDto, user: TenantUser): Promise<IPageResult<any>> {
     const { page = 1, pageSize = 20 } = query;
     const skip = (page - 1) * pageSize;
+
+    // 校验该分组所属项目归当前用户所有
+    const group = await this.prisma.errorGroup.findUnique({
+      where: { id: groupId },
+      select: { apikey: true },
+    });
+    if (!group) return { list: [], total: 0, page, pageSize };
+    await assertApikeyAccess(this.prisma, user, group.apikey);
 
     const [list, total] = await Promise.all([
       this.prisma.errorReport.findMany({

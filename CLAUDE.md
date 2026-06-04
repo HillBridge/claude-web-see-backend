@@ -1,0 +1,130 @@
+# CLAUDE.md
+
+本文件供 Claude Code 在本仓库工作时遵循。项目为 **Web-See 前端监控平台后端**：接收 SDK 上报的错误 / 性能 / 录屏 / 白屏数据并落库，提供多租户的查询管理接口。技术栈 NestJS 10 + Prisma 5 + MySQL + Redis + MinIO。
+
+---
+
+## 0. 红线规则（禁止改动 / 改动需先确认）
+
+以下文件承载**安全、多租户隔离、数据正确性**，是全局基石。**未经我明确确认，禁止修改**；即使确认，也必须先单独说明影响面：
+
+- **`src/common/utils/tenant-scope.ts`** — 多租户越权防护核心。所有查询接口靠它把数据限定在用户拥有的 apikey 范围内。改错 = 跨租户数据泄露。
+- **`src/app.module.ts`** — 全局 Guard 顺序（先 JWT 再 Roles）、Interceptor、Filter 的装配点。顺序敏感。
+- **`src/common/guards/`** 全目录 — `jwt-auth` / `roles` / `apikey-auth` / `rate-limit` / `auth-rate-limit`。鉴权与限流逻辑（含 `TRUST_PROXY` 防 XFF 伪造、域名精确匹配防前缀绕过）。
+- **`src/config/configuration.ts`** — `requireEnv` 强制关键密钥（JWT_SECRET 等），缺失即拒绝启动。不得引入硬编码默认密钥。
+- **`src/shared/prisma/prisma.service.ts`** — 全局唯一 DB 访问点。
+- **`prisma/schema.prisma`** 与 **`prisma/migrations/`** — 数据模型与迁移。尤其 `ErrorGroup` 的 `@@unique([apikey, fingerprint])` 去重指纹规则（schema 注释已说明指纹为何不含 fileName/lineNo/colNo）。**禁止手改已应用的迁移文件**；模型变更必须走 `prisma migrate`。
+- **`src/modules/report/report.controller.ts`** 及 `report.service.ts` — 唯一对外数据入口，承载体积兜底、`sendBeacon` text/plain 兼容、静默丢弃脏数据等约定。
+- **`src/main.ts`** — bootstrap（body parser、CORS、全局前缀 exclude 列表、BigInt 序列化补丁、ValidationPipe）。
+
+**绝对禁止触碰**：`.env*`（任何环境变量文件）、`node_modules/`、`dist/`、`prisma/migrations/` 下已存在的迁移目录。
+
+---
+
+## 1. 架构说明
+
+```
+src/
+├── main.ts                  bootstrap：body parser / CORS / 全局前缀 / ValidationPipe / Swagger / BigInt 补丁
+├── app.module.ts            根模块：装配模块 + 全局 Guard / Interceptor / Filter
+├── config/configuration.ts  环境变量集中加载（requireEnv 强制校验）
+│
+├── common/                  横切关注点（被各业务模块复用）
+│   ├── guards/              jwt-auth / roles / apikey-auth / rate-limit / auth-rate-limit
+│   ├── interceptors/        transform（统一响应）/ logging（请求日志）
+│   ├── filters/             http-exception（全局异常）
+│   ├── decorators/          @Public / @Roles / @CurrentUser
+│   ├── redis/               RedisModule + RedisService（token 白名单、限流计数）
+│   ├── utils/tenant-scope   多租户数据隔离核心（resolveTenantApikeyFilter / assertApikeyAccess）
+│   ├── dto/ interfaces/     分页 DTO、分页结果 / JWT payload 接口
+│
+├── shared/                  基础设施（全局共享 Provider）
+│   ├── prisma/              PrismaService + PrismaModule
+│   ├── logger/              nest-winston 日志
+│   └── minio/               MinIO 对象存储（存 sourcemap 内容）
+│
+└── modules/                 业务模块（每个 = controller + service + module + dto/）
+    ├── auth/                登录注册、JWT / 本地 Passport 策略
+    ├── users/               用户管理
+    ├── projects/            项目 / apikey 管理、域名白名单
+    ├── report/              SDK 数据上报统一入口（错误 / 性能 / 录屏 / 白屏收口）
+    ├── errors/              错误查询、分组聚合去重、详情、删除
+    ├── performance/         性能数据查询（Web Vitals）
+    ├── record-screen/       录屏数据（rrweb 事件流）
+    ├── white-screen/        白屏检测数据
+    ├── source-map/          sourcemap 上传（→MinIO）与堆栈还原
+    └── cleanup/             定时任务：数据归档 / 清理（@Cron）
+```
+
+**分层约定**：`shared/` = 外部资源连接（DB / 日志 / 存储）；`common/` = 框架级横切逻辑（鉴权 / 限流 / 响应格式 / 租户隔离）。
+
+**数据流**：SDK → `POST /reportData`（ApiKeyAuthGuard + RateLimitGuard）→ ReportService 分发落库。管理端 → 携带 JWT → 各模块查询接口 → 经 `tenant-scope` 限定 apikey 范围。
+
+**数据库**（MySQL，10 张表）：`users / projects / error_reports / error_groups / breadcrumbs / performance_reports / performance_daily_stats / record_screens / source_map_files / white_screens`。
+
+---
+
+## 2. 执行前 / 中 / 后行为规范
+
+### 执行前 · 必须
+- **列出受影响文件清单**（路径 + 改动意图一句话）。
+- **说明实现方案**，包含是否触及第 0 节红线文件；若触及，单独高亮并等我确认。
+- **等我确认后再动手**。涉及多步的，先给整体计划。
+
+### 执行中 · 必须
+- **小步推进，到关键节点暂停**汇报，不要一口气改完一大片。
+- **遇到设计分叉（多种合理方案 / 影响接口契约 / 影响 schema）让我决策**，不要自行替我选定。
+- **不顺手改无关代码**：不重排 import、不批量改格式、不"顺便优化"未要求的部分。一次只做一件事。
+- 改 Prisma 模型必须走迁移流程，不手改既有迁移。
+
+### 执行后 · 必须
+- **补充 / 更新测试**（见第 4 节；当前无测试框架则明确说明"未加测试及原因"，并提议如何补）。
+- **给出改动清单**：逐文件列出改了什么。
+- **说明副作用与风险**：是否影响接口契约、租户隔离、限流、迁移、定时任务等；需要的环境变量或迁移命令也一并列出。
+
+---
+
+## 3. 编码规范（提炼自现有代码风格）
+
+- **语言/配置**：TypeScript 5，CommonJS，target ES2021。tsconfig 为**非严格模式**（`strictNullChecks: false`、`noImplicitAny: false`）——沿用，不要单独为某文件开严格。
+- **命名**：文件 `kebab-case`，类 `PascalCase`，DB 字段 `snake_case`（Prisma 用 `@map` 映射到 camelCase）。
+- **模块结构**：业务模块严格按 `controller / service / module / dto/` 切分，新功能沿用同构目录。
+- **路径别名**：tsconfig 已定义 `@/ @common/ @modules/ @shared/ @prisma/ @config/ @logger/`。注意现状是**别名与相对路径混用**——新代码**与所在文件保持一致**，不要为统一风格去批量改动既有 import。
+- **统一响应**：返回值由 `TransformInterceptor` 包成 `{ code, message, data, timestamp }`，业务代码直接 `return data` 即可。**上报类接口例外**（直接返回 `{ code, message }`）。
+- **多租户**：所有查询类接口签名带 `@CurrentUser() user: TenantUser`，service 内必须经 `resolveTenantApikeyFilter`（列表）或 `assertApikeyAccess`（按 id 查单条）做归属校验。新增查询接口**默认就要做租户隔离**。
+- **鉴权**：路由默认受全局 JwtAuthGuard 保护；公开接口用 `@Public()`；SDK 上报接口用 `@UseGuards(RateLimitGuard, ApiKeyAuthGuard)`。
+- **校验**：入参用 class-validator DTO（全局 ValidationPipe 已开 `whitelist` + `forbidNonWhitelisted`）。SDK 上报因字段名不固定不套严格 DTO，改为 controller 内手动必填 + 体积兜底（见 report.controller 现有写法）。
+- **时间戳**：用 `BigInt`，已在 main.ts 全局加 `toJSON` 补丁，勿重复处理。
+- **注释**：中文注释密集，关键安全 / 设计决策**必须解释"为什么"**（参考 schema 指纹规则、rate-limit 的 XFF 信任说明）。延续这种密度。
+- **密钥**：禁止硬编码任何密钥 / 默认口令，统一走 `configuration.ts` + 环境变量。
+- **格式化**：仅 Prettier（`npm run format`，默认规则），无 ESLint。提交前对**改动文件**跑 format，不要全仓格式化。
+- **旧接口兼容**：`reportData / getErrorList / getRecordScreenId / getmap` 不加 `/api` 前缀（main.ts exclude 列表），改动这些路由前先确认兼容性。
+
+---
+
+## 4. 测试规范
+
+**现状：本项目当前没有任何测试框架与测试文件**——`package.json` 无 Jest、无 `test` 脚本，仓库中无 `*.spec.ts` / `*.test.ts`。
+
+因此：
+
+- **不要假装运行测试**，也不要捏造测试通过。涉及"执行后补测试"时，若框架不存在，**如实说明"项目尚无测试框架，本次未加测试"**，并在改动清单中提示这一缺口。
+- **验证方式（当前可用手段）**：
+  - 编译检查：`npm run build`（`nest build`）必须通过。
+  - 手动验证：`npm run start:dev` 启动后，非生产环境可用 Swagger（`http://localhost:<port>/swagger`）核对接口行为。
+- **若我要求新增测试**：按 NestJS 官方默认方案引入 **Jest + @nestjs/testing + ts-jest**，测试文件与被测文件同目录、命名 `*.spec.ts`，并在 `package.json` 补 `test` 脚本。引入测试框架属于结构性变更，**须先按第 2 节"执行前"流程向我说明方案并确认**，不要擅自添加依赖。
+- 优先为高风险逻辑补测：`tenant-scope`（租户隔离）、限流 Guard、apikey/域名校验、错误去重指纹（`report/utils/fingerprint`）。
+
+---
+
+## 5. 常用命令
+
+```bash
+npm run start:dev          # 开发启动（watch，NODE_ENV=development）
+npm run build              # 编译（提交前必跑）
+npm run format             # Prettier 格式化 src/**/*.ts
+npm run prisma:generate    # 生成 Prisma Client
+npm run prisma:migrate:dev # 开发迁移（改 schema 后）
+npm run prisma:studio      # 数据库可视化
+npm run backfill:error-groups   # 回填错误分组
+```

@@ -7,5 +7,6 @@ import { SourceMapController } from './source-map.controller';
   imports: [MinioModule],
   providers: [SourceMapService],
   controllers: [SourceMapController],
+  exports: [SourceMapService],
 })
 export class SourceMapModule {}

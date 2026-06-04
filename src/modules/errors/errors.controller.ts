@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Delete, Param, Query, ParseIntPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ErrorsService } from './errors.service';
 import { QueryErrorDto } from './dto/query-error.dto';
@@ -47,5 +47,12 @@ export class ErrorsController {
   @Get('errors/:id')
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: TenantUser) {
     return this.errorsService.findOne(id, user);
+  }
+
+  @ApiOperation({ summary: '删除错误分组及其全部关联数据（录屏 / 用户行为 / sourcemap）' })
+  @ApiBearerAuth()
+  @Delete('errorGroups/:id')
+  removeGroup(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: TenantUser) {
+    return this.errorsService.deleteGroup(id, user);
   }
 }

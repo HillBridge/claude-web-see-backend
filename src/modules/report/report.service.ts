@@ -120,10 +120,15 @@ export class ReportService {
 
   private async saveRecordScreen(data: ReportDataDto) {
     if (!data.recordScreenId || !data.events) return;
+    // apikey 已由 ApiKeyAuthGuard 校验;无 apikey 不落库,避免落到 NULL 分区绕过复合唯一去重
+    if (!data.apikey) return;
 
-    // upsert: 同一 recordScreenId 只保存一条
+    // upsert: 按 (apikey, recordScreenId) 复合唯一去重。仅在“当前 apikey 名下”定位记录,
+    // 故攻击者用自己 apikey + 他人 recordScreenId 时不会命中他人行,只会新建自己名下的行。
     await this.prisma.recordScreen.upsert({
-      where: { recordScreenId: data.recordScreenId },
+      where: {
+        apikey_recordScreenId: { apikey: data.apikey, recordScreenId: data.recordScreenId },
+      },
       update: {
         events: data.events,
         time: data.time ? BigInt(data.time) : null,

@@ -174,7 +174,7 @@ model PerformanceReport {
 // ============================================================
 model RecordScreen {
   id             Int      @id @default(autoincrement())
-  recordScreenId String   @unique @map("record_screen_id") @db.VarChar(64)
+  recordScreenId String   @map("record_screen_id") @db.VarChar(64)
   events         String   @db.LongText
   apikey         String?  @db.VarChar(64)
   monitorUserId  String?  @map("monitor_user_id") @db.VarChar(100)
@@ -182,8 +182,13 @@ model RecordScreen {
   time           BigInt?
   createdAt      DateTime @default(now()) @map("created_at")
 
+  // 去重/唯一键按 (apikey, recordScreenId) 复合,而非 recordScreenId 全局唯一。
+  // recordScreenId 由客户端 SDK 生成,若全局唯一,攻击者用自己合法 apikey + 他人的
+  // recordScreenId 上报即可 upsert 命中并覆盖他人录屏(跨租户数据污染)。复合唯一后
+  // 不同租户各自独立去重,跨租户的同名 ID 落为各自名下的独立行。(同 ErrorGroup 的
+  // @@unique([apikey, fingerprint]) 隔离理念)
+  @@unique([apikey, recordScreenId])
   @@index([recordScreenId])
-  @@index([apikey])
   @@map("record_screens")
 }
 

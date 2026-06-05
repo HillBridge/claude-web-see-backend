@@ -14,12 +14,12 @@ export class RecordScreenService {
 
   /** 兼容旧接口: 按 recordScreenId 查询 */
   async findByRecordScreenId(recordScreenId: string, user: TenantUser) {
-    const records = await this.prisma.recordScreen.findMany({ where: { recordScreenId } });
-    // 校验录屏所属项目归当前用户所有(按 apikey 判定);任一不属于则拒绝
-    for (const r of records) {
-      await assertApikeyAccess(this.prisma, user, r.apikey);
-    }
-    return records;
+    // recordScreenId 不再全局唯一(跨租户可同名),故须按当前用户可访问的 apikey 范围过滤,
+    // 只返回归属本租户的记录;否则外来同名行会混入并导致逐行鉴权抛 403、连带阻断本人查询。
+    const scope = await resolveTenantApikeyFilter(this.prisma, user);
+    return this.prisma.recordScreen.findMany({
+      where: { ...scope, recordScreenId },
+    });
   }
 
   async findAll(query: QueryRecordScreenDto, user: TenantUser): Promise<IPageResult<any>> {

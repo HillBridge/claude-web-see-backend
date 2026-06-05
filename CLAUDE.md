@@ -11,13 +11,28 @@
 - **`src/common/utils/tenant-scope.ts`** — 多租户越权防护核心。所有查询接口靠它把数据限定在用户拥有的 apikey 范围内。改错 = 跨租户数据泄露。
 - **`src/app.module.ts`** — 全局 Guard 顺序（先 JWT 再 Roles）、Interceptor、Filter 的装配点。顺序敏感。
 - **`src/common/guards/`** 全目录 — `jwt-auth` / `roles` / `apikey-auth` / `rate-limit` / `auth-rate-limit`。鉴权与限流逻辑（含 `TRUST_PROXY` 防 XFF 伪造、域名精确匹配防前缀绕过）。
-- **`src/config/configuration.ts`** — `requireEnv` 强制关键密钥（JWT_SECRET 等），缺失即拒绝启动。不得引入硬编码默认密钥。
+- **`src/config/configuration.ts`** — `requireEnv` 强制关键密钥（JWT_SECRET 等），缺失即拒绝启动。不得引入硬编码默认密钥。`recordScreen.encKey`（环境变量 `RECORD_SCREEN_ENC_KEY`）为录屏静态加密密钥，**可选**：未配置则录屏明文存储，配置后新写入即加密。
 - **`src/shared/prisma/prisma.service.ts`** — 全局唯一 DB 访问点。
-- **`prisma/schema.prisma`** 与 **`prisma/migrations/`** — 数据模型与迁移。尤其 `ErrorGroup` 的 `@@unique([apikey, fingerprint])` 去重指纹规则（schema 注释已说明指纹为何不含 fileName/lineNo/colNo）。**禁止手改已应用的迁移文件**；模型变更必须走 `prisma migrate`。
-- **`src/modules/report/report.controller.ts`** 及 `report.service.ts` — 唯一对外数据入口，承载体积兜底、`sendBeacon` text/plain 兼容、静默丢弃脏数据等约定。
+- **`prisma/schema.prisma`** 与 **`prisma/migrations/`** — 数据模型与迁移。尤其 `ErrorGroup` 的 `@@unique([apikey, fingerprint])` 去重指纹规则（schema 注释已说明指纹为何不含 fileName/lineNo/colNo）；以及 `RecordScreen` 的 `@@unique([apikey, recordScreenId])` 复合唯一（防跨租户覆盖，见 schema 注释）、events 已迁出 DB 改存 MinIO（仅留 `eventsKey`/`eventsSize`）。**禁止手改已应用的迁移文件**；模型变更必须走 `prisma migrate`。
+- **`src/modules/report/report.controller.ts`** 及 `report.service.ts` — 唯一对外数据入口，承载体积兜底、`sendBeacon` text/plain 兼容、静默丢弃脏数据等约定。`saveRecordScreen` 还承载录屏写入链路：events 落 MinIO 前经 `record-screen-crypto` 加密（详见下方「录屏存储与加密流程」）。
+- **`src/modules/record-screen/record-screen-crypto.ts`** 及 `record-screen.util.ts` — 录屏 events 的静态加密（AES-256-GCM）与 MinIO 对象 key 方案。改错 = 录屏不可读 / PII 明文泄露 / 跨对象 key 冲突。加解密各只一处（写在 report、读在 record-screen），算法与 key 方案集中于此两文件，**禁止在别处另起加解密或拼 key**。
 - **`src/main.ts`** — bootstrap（body parser、CORS、全局前缀 exclude 列表、BigInt 序列化补丁、ValidationPipe）。
 
 **绝对禁止触碰**：`.env*`（任何环境变量文件）、`node_modules/`、`dist/`、`prisma/migrations/` 下已存在的迁移目录。
+
+### 录屏存储与加密流程（改 record-screen / report 任一环节前必读）
+
+录屏 events 是 rrweb 的不透明 blob（SDK 端已 gzip+base64，后端只存不解析），**不入 DB，存 MinIO**，DB 仅留 `eventsKey`/`eventsSize`。可能含 PII，故落盘前做**静态加密**（AES-256-GCM），作为对象存储层的纵深防御。加解密对前端透明——API 返回的 `events` 始终是明文。
+
+- **写入（加密）**：`POST /reportData`（type=`recordScreen`）→ `ReportService.saveRecordScreen`：
+  `encryptEvents(明文, encKey)` → `putObject(key, blob)` → DB upsert 存 `eventsKey`/`eventsSize`（不存 events 内容）。
+- **读取（解密）**：`GET /api/record-screens/:id` 等 → `RecordScreenService.loadEvents(eventsKey)`：
+  `getObject(eventsKey)` → `decryptEvents(blob, encKey)` → 拼回 `events` 字段返回。
+- **对象布局**：`[MAGIC("WSE1") | IV(12) | TAG(16) | CIPHERTEXT]`。读取按 `WSE1` 头区分「新密文 / 历史明文对象」，旧明文直通——**零迁移向后兼容**。
+- **密钥可选**：`RECORD_SCREEN_ENC_KEY` 未配置 → 写入明文、读取直通（功能不受影响）；配置后新写入即加密。须 32 字节（base64/hex），长度非法启动即报错。
+- **对象 key**：`record-screen/{apikey}/{recordScreenId}`（`record-screen.util.ts`），与 `@@unique([apikey, recordScreenId])` 的 upsert 覆盖语义一致（幂等）。
+- **清理**：`CleanupService` 删 DB 行前先 `removeObject` 清 MinIO 对象，避免孤儿。
+- **红线约束**：加密只在 `report`、解密只在 `record-screen`，算法/格式/key 方案集中在 `record-screen-crypto.ts` 与 `record-screen.util.ts`，**禁止在别处另起加解密或拼 key**；改对象布局/MAGIC 需保证对存量对象向后兼容。
 
 ---
 
@@ -50,7 +65,7 @@ src/
     ├── report/              SDK 数据上报统一入口（错误 / 性能 / 录屏 / 白屏收口）
     ├── errors/              错误查询、分组聚合去重、详情、删除
     ├── performance/         性能数据查询（Web Vitals）
-    ├── record-screen/       录屏数据（rrweb 事件流）
+    ├── record-screen/       录屏数据（rrweb 事件流；events 存 MinIO 并静态加密，DB 仅存 key）
     ├── white-screen/        白屏检测数据
     ├── source-map/          sourcemap 上传（→MinIO）与堆栈还原
     └── cleanup/             定时任务：数据归档 / 清理（@Cron）

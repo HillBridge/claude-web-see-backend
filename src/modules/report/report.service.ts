@@ -1,16 +1,29 @@
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "@shared/prisma/prisma.service";
 import { MinioService } from "@/shared/minio/minio.service";
 import { ReportDataDto } from "./dto/report-data.dto";
 import { buildFingerprint, truncate } from "./utils/fingerprint";
 import { recordScreenObjectKey } from "@/modules/record-screen/record-screen.util";
+import {
+  parseEncKey,
+  encryptEvents,
+} from "@/modules/record-screen/record-screen-crypto";
 
 @Injectable()
 export class ReportService {
+  // 录屏加密密钥(可选):配置则新写入加密,未配置则明文。启动时解析一次,非法长度即暴露。
+  private readonly recordScreenEncKey: Buffer | null;
+
   constructor(
     private prisma: PrismaService,
     private minio: MinioService,
-  ) {}
+    private config: ConfigService,
+  ) {
+    this.recordScreenEncKey = parseEncKey(
+      this.config.get<string>("recordScreen.encKey"),
+    );
+  }
 
   async handleReport(data: ReportDataDto): Promise<void> {
     if (!data || !data.type) return;
@@ -130,9 +143,14 @@ export class ReportService {
 
     // events 大字段落 MinIO,DB 只存对象 key + 字节数。key 按 (apikey, recordScreenId) 确定性命名,
     // 重复投递覆盖同一对象,与下方 upsert 的覆盖语义一致(幂等)。
+    // 配置了密钥则静态加密后再落库(events 含 PII,作对象存储层纵深防御)。
     const key = recordScreenObjectKey(data.apikey, data.recordScreenId);
-    const buf = Buffer.from(data.events, "utf-8");
-    await this.minio.putObject(key, buf, "text/plain");
+    const plain = Buffer.from(data.events, "utf-8");
+    const blob = encryptEvents(plain, this.recordScreenEncKey);
+    await this.minio.putObject(key, blob, "application/octet-stream");
+
+    // eventsSize 记录原始(明文)字节数,作为前端展示的录屏体积,不受加密膨胀影响
+    const eventsSize = plain.length;
 
     // upsert: 按 (apikey, recordScreenId) 复合唯一去重。仅在“当前 apikey 名下”定位记录,
     // 故攻击者用自己 apikey + 他人 recordScreenId 时不会命中他人行,只会新建自己名下的行。
@@ -145,13 +163,13 @@ export class ReportService {
       },
       update: {
         eventsKey: key,
-        eventsSize: buf.length,
+        eventsSize,
         time: data.time ? BigInt(data.time) : null,
       },
       create: {
         recordScreenId: data.recordScreenId,
         eventsKey: key,
-        eventsSize: buf.length,
+        eventsSize,
         apikey: data.apikey,
         monitorUserId: data.userId,
         pageUrl: data.pageUrl,

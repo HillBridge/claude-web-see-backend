@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "@shared/prisma/prisma.service";
 import { MinioService } from "@/shared/minio/minio.service";
 import { IPageResult } from "@/common/interfaces/page-result.interface";
@@ -8,26 +9,32 @@ import {
   resolveTenantApikeyFilter,
   assertApikeyAccess,
 } from "@/common/utils/tenant-scope";
+import { parseEncKey, decryptEvents } from "./record-screen-crypto";
 
 @Injectable()
 export class RecordScreenService {
   private readonly logger = new Logger(RecordScreenService.name);
+  // 录屏加密密钥(可选):用于解密 MinIO 取回的对象;明文对象由 decryptEvents 自动识别直通
+  private readonly encKey: Buffer | null;
 
   constructor(
     private prisma: PrismaService,
     private minio: MinioService,
-  ) {}
+    private config: ConfigService,
+  ) {
+    this.encKey = parseEncKey(this.config.get<string>("recordScreen.encKey"));
+  }
 
   /**
-   * 取回录屏 events: events 已迁 MinIO,按 eventsKey 从对象存储读取;
-   * eventsKey 为空或对象缺失/读取失败则返回 null(容错,不阻断详情返回 ——
-   * 录屏可能已过保留期被清)。
+   * 取回录屏 events: events 已迁 MinIO,按 eventsKey 从对象存储读取并解密;
+   * eventsKey 为空或对象缺失/读取/解密失败则返回 null(容错,不阻断详情返回 ——
+   * 录屏可能已过保留期被清)。明文历史对象由 decryptEvents 按版本头自动直通。
    */
   private async loadEvents(eventsKey: string | null): Promise<string | null> {
     if (!eventsKey) return null;
     try {
       const buf = await this.minio.getObject(eventsKey);
-      return buf.toString("utf-8");
+      return decryptEvents(buf, this.encKey);
     } catch (e) {
       this.logger.warn(`录屏对象读取失败 key=${eventsKey}: ${e?.message}`);
       return null;

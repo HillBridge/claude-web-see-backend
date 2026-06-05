@@ -1,14 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import * as path from 'path';
-import { PrismaService } from '@shared/prisma/prisma.service';
-import { SourceMapService } from '@/modules/source-map/source-map.service';
-import { IPageResult } from '@/common/interfaces/page-result.interface';
-import { QueryErrorDto } from './dto/query-error.dto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import * as path from "path";
+import { PrismaService } from "@shared/prisma/prisma.service";
+import { SourceMapService } from "@/modules/source-map/source-map.service";
+import { IPageResult } from "@/common/interfaces/page-result.interface";
+import { QueryErrorDto } from "./dto/query-error.dto";
 import {
   TenantUser,
   resolveTenantApikeyFilter,
   assertApikeyAccess,
-} from '@/common/utils/tenant-scope';
+} from "@/common/utils/tenant-scope";
 
 @Injectable()
 export class ErrorsService {
@@ -22,12 +22,27 @@ export class ErrorsService {
    * 每行取该分组「最近一次发生」的完整明细(message/pageUrl/time/userId/行列/breadcrumb 都在),
    * 再叠加 count / firstSeen / lastSeen / groupId, 前端原有列零改动即可显示去重结果。
    */
-  async findAll(query: QueryErrorDto, user: TenantUser): Promise<IPageResult<any>> {
-    const { page = 1, pageSize = 20, apikey, projectId, type, userId, startTime, endTime } = query;
+  async findAll(
+    query: QueryErrorDto,
+    user: TenantUser,
+  ): Promise<IPageResult<any>> {
+    const {
+      page = 1,
+      pageSize = 20,
+      apikey,
+      projectId,
+      type,
+      userId,
+      startTime,
+      endTime,
+    } = query;
     const skip = (page - 1) * pageSize;
 
     // 按当前用户解析可访问的 apikey 范围(租户隔离)
-    const where: any = await resolveTenantApikeyFilter(this.prisma, user, { apikey, projectId });
+    const where: any = await resolveTenantApikeyFilter(this.prisma, user, {
+      apikey,
+      projectId,
+    });
 
     if (type) where.type = type;
     // userId 不是分组列(已进指纹), 通过组内明细过滤
@@ -43,11 +58,11 @@ export class ErrorsService {
         where,
         skip,
         take: pageSize,
-        orderBy: { lastSeen: 'desc' },
+        orderBy: { lastSeen: "desc" },
         include: {
           reports: {
             take: 1,
-            orderBy: { createdAt: 'desc' },
+            orderBy: { createdAt: "desc" },
             include: { breadcrumbs: true },
           },
         },
@@ -85,7 +100,14 @@ export class ErrorsService {
     if (!item) return null;
     // 校验该错误所属项目归当前用户所有
     await assertApikeyAccess(this.prisma, user, item.apikey);
-    return this.mapErrorItem(item);
+    // 录屏保留期(30天)短于错误(90天):过期后该错误仍在但关联录屏已被清。
+    // 返回 recordScreenAvailable 让前端区分「无录屏」与「录屏已过期」,优雅降级提示。
+    const recordScreenAvailable = item.recordScreenId
+      ? (await this.prisma.recordScreen.count({
+          where: { recordScreenId: item.recordScreenId, apikey: item.apikey },
+        })) > 0
+      : false;
+    return { ...this.mapErrorItem(item), recordScreenAvailable };
   }
 
   /**
@@ -101,7 +123,7 @@ export class ErrorsService {
       select: { id: true, apikey: true },
     });
     if (!group) {
-      throw new NotFoundException('错误分组不存在');
+      throw new NotFoundException("错误分组不存在");
     }
     // 校验该分组所属项目归当前用户所有(租户隔离, 防越权删除)
     await assertApikeyAccess(this.prisma, user, group.apikey);
@@ -113,7 +135,9 @@ export class ErrorsService {
     });
 
     const recordScreenIds = [
-      ...new Set(reports.map((r) => r.recordScreenId).filter((v): v is string => !!v)),
+      ...new Set(
+        reports.map((r) => r.recordScreenId).filter((v): v is string => !!v),
+      ),
     ];
     // sourcemap 以 basename 存储(见 source-map.service.objectKey 与前端 matchStr), 故按 basename 去重
     const mapTargets = [
@@ -135,36 +159,62 @@ export class ErrorsService {
 
     // 2) 回收录屏: 仅当无其他错误再引用该 recordScreenId
     for (const recordScreenId of recordScreenIds) {
-      const stillUsed = await this.prisma.errorReport.count({ where: { recordScreenId } });
+      const stillUsed = await this.prisma.errorReport.count({
+        where: { recordScreenId },
+      });
       if (stillUsed === 0) {
-        await this.prisma.recordScreen.deleteMany({ where: { recordScreenId } });
+        await this.prisma.recordScreen.deleteMany({
+          where: { recordScreenId },
+        });
       }
     }
 
     // 3) 回收 sourcemap: 共享资源, 仅当该文件下已无任何错误引用时才删(report.fileName 可能为完整 URL, 用 contains 保守匹配)
     for (const target of mapTargets) {
       const stillUsed = await this.prisma.errorReport.count({
-        where: { apikey: target.apikey, fileName: { contains: target.fileName } },
+        where: {
+          apikey: target.apikey,
+          fileName: { contains: target.fileName },
+        },
       });
       if (stillUsed > 0) continue;
       const map = await this.prisma.sourceMapFile.findUnique({
-        where: { fileName_apikey: { fileName: target.fileName, apikey: target.apikey } },
+        where: {
+          fileName_apikey: { fileName: target.fileName, apikey: target.apikey },
+        },
       });
       if (map) {
-        await this.sourceMapService.deleteMapFile(target.apikey, target.fileName);
+        await this.sourceMapService.deleteMapFile(
+          target.apikey,
+          target.fileName,
+        );
       }
     }
 
-    return { message: '删除成功' };
+    return { message: "删除成功" };
   }
 
   /** 错误分组列表(去重聚合视图: 一组一行, 含发生次数与首末时间) */
-  async findGroups(query: QueryErrorDto, user: TenantUser): Promise<IPageResult<any>> {
-    const { page = 1, pageSize = 20, apikey, projectId, type, startTime, endTime } = query;
+  async findGroups(
+    query: QueryErrorDto,
+    user: TenantUser,
+  ): Promise<IPageResult<any>> {
+    const {
+      page = 1,
+      pageSize = 20,
+      apikey,
+      projectId,
+      type,
+      startTime,
+      endTime,
+    } = query;
     const skip = (page - 1) * pageSize;
 
     // 按当前用户解析可访问的 apikey 范围(租户隔离)
-    const where: any = await resolveTenantApikeyFilter(this.prisma, user, { apikey, projectId });
+    const where: any = await resolveTenantApikeyFilter(this.prisma, user, {
+      apikey,
+      projectId,
+    });
 
     if (type) where.type = type;
     if (startTime || endTime) {
@@ -178,7 +228,7 @@ export class ErrorsService {
         where,
         skip,
         take: pageSize,
-        orderBy: { lastSeen: 'desc' },
+        orderBy: { lastSeen: "desc" },
       }),
       this.prisma.errorGroup.count({ where }),
     ]);
@@ -192,7 +242,11 @@ export class ErrorsService {
   }
 
   /** 某个错误分组下的发生明细(分页) */
-  async findGroupReports(groupId: number, query: QueryErrorDto, user: TenantUser): Promise<IPageResult<any>> {
+  async findGroupReports(
+    groupId: number,
+    query: QueryErrorDto,
+    user: TenantUser,
+  ): Promise<IPageResult<any>> {
     const { page = 1, pageSize = 20 } = query;
     const skip = (page - 1) * pageSize;
 
@@ -210,7 +264,7 @@ export class ErrorsService {
         skip,
         take: pageSize,
         include: { breadcrumbs: true },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
       }),
       this.prisma.errorReport.count({ where: { errorGroupId: groupId } }),
     ]);

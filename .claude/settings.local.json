@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -i '' 's/`npm run /`pnpm run /g; s/`npm test`/`pnpm test`/g; s/^npm run /pnpm run /g; s/^npm test /pnpm test /g' CLAUDE.md test/README.md)",
+      "Bash(sed -n '/## 5. 常用命令/,/```$/p' CLAUDE.md)"
+    ]
+  }
+}

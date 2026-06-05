@@ -2,8 +2,8 @@
 
 本目录是 **端到端（E2E）测试**，与 `src/**/*.spec.ts` 单元测试相互独立、互不加载。
 
-- 单元测试：`jest.config.js`，Mock 掉 DB/Redis/MinIO，命令 `npm test`。
-- E2E 测试：`test/jest-e2e.json`，起**真实** MySQL/Redis/MinIO 容器，命令 `npm run test:e2e`。
+- 单元测试：`jest.config.js`，Mock 掉 DB/Redis/MinIO，命令 `pnpm test`。
+- E2E 测试：`test/jest-e2e.json`，起**真实** MySQL/Redis/MinIO 容器，命令 `pnpm run test:e2e`。
 
 E2E 验证的是单测结构性测不到的**装配层契约**：全局 Guard 顺序、多租户隔离接线、`main.ts` 全局接线、SDK 上报入口、录屏加解密往返。
 
@@ -15,7 +15,7 @@ E2E 验证的是单测结构性测不到的**装配层契约**：全局 Guard �
 ## 运行
 
 ```bash
-npm run test:e2e
+pnpm run test:e2e
 ```
 
 无需手动起数据库——`test/setup/global-setup.ts` 会自动起容器、注入连接环境变量、执行真实 `prisma migrate deploy` 建表；`global-teardown.ts` 在结束后销毁容器。

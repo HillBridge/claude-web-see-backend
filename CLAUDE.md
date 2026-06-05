@@ -4,6 +4,13 @@
 
 ---
 
+## 协作约定（最高优先级，每次都要遵守）
+
+- **称呼**：每次回复，以及任何需要我确认的场合，开头都必须先喊我「**9527大富豪**」。
+- **包管理器**：本仓库统一用 **pnpm**。**禁止使用 npm 与 yarn**——安装/升级/移除依赖一律 `pnpm add` / `pnpm remove` / `pnpm install`；运行脚本用 `pnpm run <script>`。（注：npm 9.6.7 安装 testcontainers/supertest 等会触发依赖树解析 bug，亦是禁用原因之一。）
+
+---
+
 ## 0. 红线规则（禁止改动 / 改动需先确认）
 
 以下文件承载**安全、多租户隔离、数据正确性**，是全局基石。**未经我明确确认，禁止修改**；即使确认，也必须先单独说明影响面：
@@ -112,7 +119,7 @@ src/
 - **时间戳**：用 `BigInt`，已在 main.ts 全局加 `toJSON` 补丁，勿重复处理。
 - **注释**：中文注释密集，关键安全 / 设计决策**必须解释"为什么"**（参考 schema 指纹规则、rate-limit 的 XFF 信任说明）。延续这种密度。
 - **密钥**：禁止硬编码任何密钥 / 默认口令，统一走 `configuration.ts` + 环境变量。
-- **格式化**：仅 Prettier（`npm run format`，默认规则），无 ESLint。提交前对**改动文件**跑 format，不要全仓格式化。
+- **格式化**：仅 Prettier（`pnpm run format`，默认规则），无 ESLint。提交前对**改动文件**跑 format，不要全仓格式化。
 - **旧接口兼容**：`reportData / getErrorList / getRecordScreenId / getmap` 不加 `/api` 前缀（main.ts exclude 列表），改动这些路由前先确认兼容性。
 
 ---
@@ -121,18 +128,18 @@ src/
 
 **现状：项目已具备两层测试**——
 
-1. **单元测试**（Jest + ts-jest，配置 `jest.config.js`）：`src/**/*.spec.ts`，与被测文件同目录。**不连真实 DB/Redis/MinIO、不起 HTTP 服务**，全部 Mock。已覆盖 `tenant-scope`、各 Guard、限流、apikey/域名校验、错误去重指纹、录屏加解密等高风险逻辑。命令 `npm test`。
-2. **E2E 测试**（Jest + supertest + **testcontainers**，配置 `test/jest-e2e.json`）：`test/**/*.e2e-spec.ts`，起真实 MySQL/Redis/MinIO 容器并跑真实 `prisma migrate deploy`，验证单测结构性测不到的**装配层契约**（全局 Guard 顺序、租户隔离接线、main.ts 全局接线、上报入口、录屏加解密往返）。命令 `npm run test:e2e`。详见 [`test/README.md`](test/README.md)。
+1. **单元测试**（Jest + ts-jest，配置 `jest.config.js`）：`src/**/*.spec.ts`，与被测文件同目录。**不连真实 DB/Redis/MinIO、不起 HTTP 服务**，全部 Mock。已覆盖 `tenant-scope`、各 Guard、限流、apikey/域名校验、错误去重指纹、录屏加解密等高风险逻辑。命令 `pnpm test`。
+2. **E2E 测试**（Jest + supertest + **testcontainers**，配置 `test/jest-e2e.json`）：`test/**/*.e2e-spec.ts`，起真实 MySQL/Redis/MinIO 容器并跑真实 `prisma migrate deploy`，验证单测结构性测不到的**装配层契约**（全局 Guard 顺序、租户隔离接线、main.ts 全局接线、上报入口、录屏加解密往返）。命令 `pnpm run test:e2e`。详见 [`test/README.md`](test/README.md)。
 
 要求：
 
 - **不要假装运行测试**，也不要捏造测试通过。如实报告结果；测试失败就贴输出，跳过了就说跳过。
 - **E2E 强依赖本机/CI 有可用的 Docker daemon**；无 Docker 时 E2E 无法运行，须如实说明，不得伪造通过。
 - **验证方式**：
-  - 单测：`npm test`（无需 Docker，快）。
-  - E2E：`npm run test:e2e`（需 Docker；首次拉取镜像较慢）。
-  - 编译检查：`npm run build`（`nest build`）必须通过。
-  - 手动验证：`npm run start:dev` 启动后，非生产环境可用 Swagger（`http://localhost:<port>/swagger`）核对接口行为。
+  - 单测：`pnpm test`（无需 Docker，快）。
+  - E2E：`pnpm run test:e2e`（需 Docker；首次拉取镜像较慢）。
+  - 编译检查：`pnpm run build`（`nest build`）必须通过。
+  - 手动验证：`pnpm run start:dev` 启动后，非生产环境可用 Swagger（`http://localhost:<port>/swagger`）核对接口行为。
 - **新增依赖**：本仓库用 **pnpm** 安装（npm 9.6.7 存在依赖树解析 bug，装 testcontainers/supertest 会报 `Cannot read properties of null (reading 'matches')`）。引入新测试框架/依赖属于结构性变更，**须先按第 2 节"执行前"流程说明并确认**。
 - **关键契约提醒**（写 E2E 断言时勿踩坑）：全局 `HttpExceptionFilter`（`@Catch()`）把**所有异常的 HTTP 状态统一改写为 200**，真实状态码在响应体 `body.code`（含未匹配路由的 404）。鉴权/校验失败类断言应判 `res.body.code`，而非 HTTP status。成功响应经 `TransformInterceptor` 包成 `{ code, message, data, timestamp }`。
 - 新增测试优先覆盖高风险逻辑：`tenant-scope`（租户隔离）、限流 Guard、apikey/域名校验、错误去重指纹（`report/utils/fingerprint`）、录屏加解密。
@@ -142,13 +149,13 @@ src/
 ## 5. 常用命令
 
 ```bash
-npm run start:dev          # 开发启动（watch，NODE_ENV=development）
-npm run build              # 编译（提交前必跑）
-npm test                   # 单元测试（Jest，Mock 依赖，无需 Docker）
-npm run test:e2e           # E2E 测试（supertest + testcontainers，需 Docker）
-npm run format             # Prettier 格式化 src/**/*.ts
-npm run prisma:generate    # 生成 Prisma Client
-npm run prisma:migrate:dev # 开发迁移（改 schema 后）
-npm run prisma:studio      # 数据库可视化
-npm run backfill:error-groups   # 回填错误分组
+pnpm run start:dev          # 开发启动（watch，NODE_ENV=development）
+pnpm run build              # 编译（提交前必跑）
+pnpm test                   # 单元测试（Jest，Mock 依赖，无需 Docker）
+pnpm run test:e2e           # E2E 测试（supertest + testcontainers，需 Docker）
+pnpm run format             # Prettier 格式化 src/**/*.ts
+pnpm run prisma:generate    # 生成 Prisma Client
+pnpm run prisma:migrate:dev # 开发迁移（改 schema 后）
+pnpm run prisma:studio      # 数据库可视化
+pnpm run backfill:error-groups   # 回填错误分组
 ```

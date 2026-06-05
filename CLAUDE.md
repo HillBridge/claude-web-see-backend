@@ -119,16 +119,23 @@ src/
 
 ## 4. 测试规范
 
-**现状：本项目当前没有任何测试框架与测试文件**——`package.json` 无 Jest、无 `test` 脚本，仓库中无 `*.spec.ts` / `*.test.ts`。
+**现状：项目已具备两层测试**——
 
-因此：
+1. **单元测试**（Jest + ts-jest，配置 `jest.config.js`）：`src/**/*.spec.ts`，与被测文件同目录。**不连真实 DB/Redis/MinIO、不起 HTTP 服务**，全部 Mock。已覆盖 `tenant-scope`、各 Guard、限流、apikey/域名校验、错误去重指纹、录屏加解密等高风险逻辑。命令 `npm test`。
+2. **E2E 测试**（Jest + supertest + **testcontainers**，配置 `test/jest-e2e.json`）：`test/**/*.e2e-spec.ts`，起真实 MySQL/Redis/MinIO 容器并跑真实 `prisma migrate deploy`，验证单测结构性测不到的**装配层契约**（全局 Guard 顺序、租户隔离接线、main.ts 全局接线、上报入口、录屏加解密往返）。命令 `npm run test:e2e`。详见 [`test/README.md`](test/README.md)。
 
-- **不要假装运行测试**，也不要捏造测试通过。涉及"执行后补测试"时，若框架不存在，**如实说明"项目尚无测试框架，本次未加测试"**，并在改动清单中提示这一缺口。
-- **验证方式（当前可用手段）**：
+要求：
+
+- **不要假装运行测试**，也不要捏造测试通过。如实报告结果；测试失败就贴输出，跳过了就说跳过。
+- **E2E 强依赖本机/CI 有可用的 Docker daemon**；无 Docker 时 E2E 无法运行，须如实说明，不得伪造通过。
+- **验证方式**：
+  - 单测：`npm test`（无需 Docker，快）。
+  - E2E：`npm run test:e2e`（需 Docker；首次拉取镜像较慢）。
   - 编译检查：`npm run build`（`nest build`）必须通过。
   - 手动验证：`npm run start:dev` 启动后，非生产环境可用 Swagger（`http://localhost:<port>/swagger`）核对接口行为。
-- **若我要求新增测试**：按 NestJS 官方默认方案引入 **Jest + @nestjs/testing + ts-jest**，测试文件与被测文件同目录、命名 `*.spec.ts`，并在 `package.json` 补 `test` 脚本。引入测试框架属于结构性变更，**须先按第 2 节"执行前"流程向我说明方案并确认**，不要擅自添加依赖。
-- 优先为高风险逻辑补测：`tenant-scope`（租户隔离）、限流 Guard、apikey/域名校验、错误去重指纹（`report/utils/fingerprint`）。
+- **新增依赖**：本仓库用 **pnpm** 安装（npm 9.6.7 存在依赖树解析 bug，装 testcontainers/supertest 会报 `Cannot read properties of null (reading 'matches')`）。引入新测试框架/依赖属于结构性变更，**须先按第 2 节"执行前"流程说明并确认**。
+- **关键契约提醒**（写 E2E 断言时勿踩坑）：全局 `HttpExceptionFilter`（`@Catch()`）把**所有异常的 HTTP 状态统一改写为 200**，真实状态码在响应体 `body.code`（含未匹配路由的 404）。鉴权/校验失败类断言应判 `res.body.code`，而非 HTTP status。成功响应经 `TransformInterceptor` 包成 `{ code, message, data, timestamp }`。
+- 新增测试优先覆盖高风险逻辑：`tenant-scope`（租户隔离）、限流 Guard、apikey/域名校验、错误去重指纹（`report/utils/fingerprint`）、录屏加解密。
 
 ---
 
@@ -137,6 +144,8 @@ src/
 ```bash
 npm run start:dev          # 开发启动（watch，NODE_ENV=development）
 npm run build              # 编译（提交前必跑）
+npm test                   # 单元测试（Jest，Mock 依赖，无需 Docker）
+npm run test:e2e           # E2E 测试（supertest + testcontainers，需 Docker）
 npm run format             # Prettier 格式化 src/**/*.ts
 npm run prisma:generate    # 生成 Prisma Client
 npm run prisma:migrate:dev # 开发迁移（改 schema 后）

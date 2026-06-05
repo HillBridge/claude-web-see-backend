@@ -112,4 +112,28 @@ describe("RateLimitGuard", () => {
       "ratelimit:apikey:unknown",
     );
   });
+
+  it("remoteAddress=::1 → 归一化为 127.0.0.1", async () => {
+    delete process.env.TRUST_PROXY;
+    const redis = makeRedis();
+    const guard = new RateLimitGuard(redis);
+    const req = {
+      body: { apikey: "k" },
+      headers: {},
+      socket: { remoteAddress: "::1" },
+    };
+    await guard.canActivate(ctx(req));
+    expect(redis.redisClient.incr).toHaveBeenCalledWith(
+      "ratelimit:ip:127.0.0.1",
+    );
+  });
+
+  it("无 socket.remoteAddress 且无 XFF → IP 回退为 unknown", async () => {
+    delete process.env.TRUST_PROXY;
+    const redis = makeRedis();
+    const guard = new RateLimitGuard(redis);
+    const req = { body: { apikey: "k" }, headers: {}, socket: {} };
+    await guard.canActivate(ctx(req));
+    expect(redis.redisClient.incr).toHaveBeenCalledWith("ratelimit:ip:unknown");
+  });
 });

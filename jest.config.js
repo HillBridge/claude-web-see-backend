@@ -7,6 +7,8 @@ module.exports = {
   preset: "ts-jest",
   testEnvironment: "node",
   rootDir: "src",
+  // 覆盖率报告输出到项目根的 coverage/(而非 src/ 内,避免污染源码目录)
+  coverageDirectory: "<rootDir>/../coverage",
   testRegex: ".*\\.spec\\.ts$",
   moduleFileExtensions: ["ts", "js", "json"],
   moduleNameMapper: {

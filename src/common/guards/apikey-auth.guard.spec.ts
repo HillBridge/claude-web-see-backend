@@ -81,6 +81,46 @@ describe("ApiKeyAuthGuard", () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it("Origin 为非空但非法的 URL → new URL 抛错被 catch 兜底为 null → 不匹配 → 403", async () => {
+    const guard = makeGuard(
+      jest.fn().mockResolvedValue({
+        id: 1,
+        allowedOrigins: ["https://example.com"],
+      }),
+    );
+    const req = {
+      body: { apikey: "ok" },
+      headers: { origin: "http://[" }, // 非法 URL,new URL() 抛错
+    };
+    await expect(guard.canActivate(ctx(req))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("项目 allowedOrigins 为 null/未定义 → 视为无白名单,放行", async () => {
+    const project = { id: 1 }; // 无 allowedOrigins 字段 → ?? [] 兜底
+    const guard = makeGuard(jest.fn().mockResolvedValue(project));
+    const req: any = {
+      body: { apikey: "ok" },
+      headers: { origin: "https://x.com" },
+    };
+    await expect(guard.canActivate(ctx(req))).resolves.toBe(true);
+  });
+
+  it("白名单条目为裸 host(无 scheme)→ extractHost 抛错后回退按裸 host 比较 → 命中放行", async () => {
+    const guard = makeGuard(
+      jest.fn().mockResolvedValue({
+        id: 1,
+        allowedOrigins: ["example.com"], // 非合法 URL,走 || entry.trim() 回退分支
+      }),
+    );
+    const req = {
+      body: { apikey: "ok" },
+      headers: { origin: "https://example.com" },
+    };
+    await expect(guard.canActivate(ctx(req))).resolves.toBe(true);
+  });
+
   it("回退使用 Referer 做匹配", async () => {
     const guard = makeGuard(
       jest.fn().mockResolvedValue({

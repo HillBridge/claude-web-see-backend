@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from '@shared/prisma/prisma.service';
+import { Injectable, Logger } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
+import { PrismaService } from "@shared/prisma/prisma.service";
+import { MinioService } from "@/shared/minio/minio.service";
 
 // 保留策略（天）
 const RETENTION = {
@@ -31,12 +32,15 @@ interface DailyAggRow {
 export class CleanupService {
   private readonly logger = new Logger(CleanupService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private minio: MinioService,
+  ) {}
 
   // 每天凌晨 3:17 执行（错开整点，减少与其他定时任务碰撞）
-  @Cron('17 3 * * *')
+  @Cron("17 3 * * *")
   async runDailyCleanup() {
-    this.logger.log('=== 开始数据清理 ===');
+    this.logger.log("=== 开始数据清理 ===");
     await this.aggregatePerformance();
     await this.deleteOldPerformanceRaw();
     await this.deleteOldErrors();
@@ -44,7 +48,7 @@ export class CleanupService {
     await this.deleteOldRecordScreens();
     await this.deleteOldWhiteScreens();
     await this.deleteOldPerformanceStats();
-    this.logger.log('=== 数据清理完成 ===');
+    this.logger.log("=== 数据清理完成 ===");
   }
 
   // PerformanceReport: 将 30~365 天前的原始数据聚合为每日均值
@@ -77,33 +81,35 @@ export class CleanupService {
 
     for (const row of rows) {
       await this.prisma.performanceDailyStat.upsert({
-        where: { statDate_apikey: { statDate: row.stat_date, apikey: row.apikey } },
+        where: {
+          statDate_apikey: { statDate: row.stat_date, apikey: row.apikey },
+        },
         create: {
-          statDate:    row.stat_date,
-          apikey:      row.apikey,
+          statDate: row.stat_date,
+          apikey: row.apikey,
           sampleCount: Number(row.sample_count),
-          avgFp:       toDecimal(row.avg_fp),
-          avgFcp:      toDecimal(row.avg_fcp),
-          avgLcp:      toDecimal(row.avg_lcp),
-          avgFid:      toDecimal(row.avg_fid),
-          avgCls:      toDecimal(row.avg_cls),
-          avgTtfb:     toDecimal(row.avg_ttfb),
-          avgDns:      toDecimal(row.avg_dns),
-          avgTcp:      toDecimal(row.avg_tcp),
-          avgSsl:      toDecimal(row.avg_ssl),
+          avgFp: toDecimal(row.avg_fp),
+          avgFcp: toDecimal(row.avg_fcp),
+          avgLcp: toDecimal(row.avg_lcp),
+          avgFid: toDecimal(row.avg_fid),
+          avgCls: toDecimal(row.avg_cls),
+          avgTtfb: toDecimal(row.avg_ttfb),
+          avgDns: toDecimal(row.avg_dns),
+          avgTcp: toDecimal(row.avg_tcp),
+          avgSsl: toDecimal(row.avg_ssl),
           avgLoadTime: toDecimal(row.avg_load_time),
         },
         update: {
           sampleCount: Number(row.sample_count),
-          avgFp:       toDecimal(row.avg_fp),
-          avgFcp:      toDecimal(row.avg_fcp),
-          avgLcp:      toDecimal(row.avg_lcp),
-          avgFid:      toDecimal(row.avg_fid),
-          avgCls:      toDecimal(row.avg_cls),
-          avgTtfb:     toDecimal(row.avg_ttfb),
-          avgDns:      toDecimal(row.avg_dns),
-          avgTcp:      toDecimal(row.avg_tcp),
-          avgSsl:      toDecimal(row.avg_ssl),
+          avgFp: toDecimal(row.avg_fp),
+          avgFcp: toDecimal(row.avg_fcp),
+          avgLcp: toDecimal(row.avg_lcp),
+          avgFid: toDecimal(row.avg_fid),
+          avgCls: toDecimal(row.avg_cls),
+          avgTtfb: toDecimal(row.avg_ttfb),
+          avgDns: toDecimal(row.avg_dns),
+          avgTcp: toDecimal(row.avg_tcp),
+          avgSsl: toDecimal(row.avg_ssl),
           avgLoadTime: toDecimal(row.avg_load_time),
         },
       });
@@ -117,7 +123,9 @@ export class CleanupService {
     const { count } = await this.prisma.performanceReport.deleteMany({
       where: { createdAt: { lt: cutoff } },
     });
-    this.logger.log(`删除原始性能数据: ${count} 条（>${RETENTION.performanceRaw}天）`);
+    this.logger.log(
+      `删除原始性能数据: ${count} 条（>${RETENTION.performanceRaw}天）`,
+    );
   }
 
   private async deleteOldErrors() {
@@ -135,15 +143,34 @@ export class CleanupService {
     const { count } = await this.prisma.errorGroup.deleteMany({
       where: { lastSeen: { lt: cutoff } },
     });
-    this.logger.log(`删除错误分组: ${count} 组（最近发生>${RETENTION.errorReport}天）`);
+    this.logger.log(
+      `删除错误分组: ${count} 组（最近发生>${RETENTION.errorReport}天）`,
+    );
   }
 
   private async deleteOldRecordScreens() {
     const cutoff = daysAgo(RETENTION.recordScreen);
+    // events 已迁 MinIO:删 DB 行前先清对象,避免遗留孤儿对象。分批捞 key 后删除,
+    // MinIO 删除失败仅告警不阻断(对象会被 bucket lifecycle 兜底过期)。
+    const expired = await this.prisma.recordScreen.findMany({
+      where: { createdAt: { lt: cutoff }, eventsKey: { not: null } },
+      select: { eventsKey: true },
+    });
+    let objDeleted = 0;
+    for (const r of expired) {
+      try {
+        await this.minio.removeObject(r.eventsKey);
+        objDeleted++;
+      } catch (e) {
+        this.logger.warn(`录屏对象删除失败 key=${r.eventsKey}: ${e?.message}`);
+      }
+    }
     const { count } = await this.prisma.recordScreen.deleteMany({
       where: { createdAt: { lt: cutoff } },
     });
-    this.logger.log(`删除录屏数据: ${count} 条（>${RETENTION.recordScreen}天）`);
+    this.logger.log(
+      `删除录屏数据: ${count} 条（>${RETENTION.recordScreen}天）, 清理 MinIO 对象 ${objDeleted}/${expired.length}`,
+    );
   }
 
   private async deleteOldWhiteScreens() {
@@ -159,7 +186,9 @@ export class CleanupService {
     const { count } = await this.prisma.performanceDailyStat.deleteMany({
       where: { statDate: { lt: cutoff } },
     });
-    this.logger.log(`删除日聚合统计: ${count} 条（>${RETENTION.performanceStat}天）`);
+    this.logger.log(
+      `删除日聚合统计: ${count} 条（>${RETENTION.performanceStat}天）`,
+    );
   }
 }
 

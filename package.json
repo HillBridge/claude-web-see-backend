@@ -20,6 +20,7 @@
     "prisma:seed": "ts-node prisma/seed.ts",
     "backfill:error-groups": "ts-node scripts/backfill-error-groups.ts",
     "regroup:error-groups": "ts-node scripts/backfill-error-groups.ts --rebuild",
+    "backfill:record-screen-minio": "ts-node scripts/backfill-record-screen-minio.ts",
     "minio": "bash scripts/start-minio.sh"
   },
   "dependencies": {

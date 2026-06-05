@@ -1,23 +1,28 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '@shared/prisma/prisma.service';
-import { ReportDataDto } from './dto/report-data.dto';
-import { buildFingerprint, truncate } from './utils/fingerprint';
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "@shared/prisma/prisma.service";
+import { MinioService } from "@/shared/minio/minio.service";
+import { ReportDataDto } from "./dto/report-data.dto";
+import { buildFingerprint, truncate } from "./utils/fingerprint";
+import { recordScreenObjectKey } from "@/modules/record-screen/record-screen.util";
 
 @Injectable()
 export class ReportService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private minio: MinioService,
+  ) {}
 
   async handleReport(data: ReportDataDto): Promise<void> {
     if (!data || !data.type) return;
 
     switch (data.type) {
-      case 'performance':
+      case "performance":
         await this.savePerformance(data);
         break;
-      case 'recordScreen':
+      case "recordScreen":
         await this.saveRecordScreen(data);
         break;
-      case 'whiteScreen':
+      case "whiteScreen":
         await this.saveWhiteScreen(data);
         break;
       default:
@@ -28,7 +33,7 @@ export class ReportService {
   }
 
   private async saveError(data: ReportDataDto) {
-    const apikey = data.apikey || 'unknown';
+    const apikey = data.apikey || "unknown";
     const fileName = truncate(
       (data as any).fileName ?? (data as any).filename ?? null,
       500,
@@ -100,7 +105,7 @@ export class ReportService {
       data: {
         pageUrl: data.pageUrl,
         time: data.time ? BigInt(data.time) : null,
-        apikey: data.apikey || 'unknown',
+        apikey: data.apikey || "unknown",
         monitorUserId: data.userId,
         sdkVersion: data.sdkVersion,
         deviceInfo: data.deviceInfo ?? undefined,
@@ -123,19 +128,30 @@ export class ReportService {
     // apikey 已由 ApiKeyAuthGuard 校验;无 apikey 不落库,避免落到 NULL 分区绕过复合唯一去重
     if (!data.apikey) return;
 
+    // events 大字段落 MinIO,DB 只存对象 key + 字节数。key 按 (apikey, recordScreenId) 确定性命名,
+    // 重复投递覆盖同一对象,与下方 upsert 的覆盖语义一致(幂等)。
+    const key = recordScreenObjectKey(data.apikey, data.recordScreenId);
+    const buf = Buffer.from(data.events, "utf-8");
+    await this.minio.putObject(key, buf, "text/plain");
+
     // upsert: 按 (apikey, recordScreenId) 复合唯一去重。仅在“当前 apikey 名下”定位记录,
     // 故攻击者用自己 apikey + 他人 recordScreenId 时不会命中他人行,只会新建自己名下的行。
     await this.prisma.recordScreen.upsert({
       where: {
-        apikey_recordScreenId: { apikey: data.apikey, recordScreenId: data.recordScreenId },
+        apikey_recordScreenId: {
+          apikey: data.apikey,
+          recordScreenId: data.recordScreenId,
+        },
       },
       update: {
-        events: data.events,
+        eventsKey: key,
+        eventsSize: buf.length,
         time: data.time ? BigInt(data.time) : null,
       },
       create: {
         recordScreenId: data.recordScreenId,
-        events: data.events,
+        eventsKey: key,
+        eventsSize: buf.length,
         apikey: data.apikey,
         monitorUserId: data.userId,
         pageUrl: data.pageUrl,

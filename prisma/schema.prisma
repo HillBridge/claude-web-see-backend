@@ -175,7 +175,11 @@ model PerformanceReport {
 model RecordScreen {
   id             Int      @id @default(autoincrement())
   recordScreenId String   @map("record_screen_id") @db.VarChar(64)
-  events         String   @db.LongText
+  // events 大字段存 MinIO,DB 仅存对象 key(eventsKey)+ 字节数(eventsSize)。SDK 上报的
+  // events 本就是客户端 gzip+base64 的不透明 blob,后端只存不解析,属"写一次/读极少/体积大"
+  // 场景,放对象存储避免撑大 InnoDB buffer pool/备份/复制。读取时按 eventsKey 从 MinIO 取回。
+  eventsKey      String?  @map("events_key") @db.VarChar(512)
+  eventsSize     Int?     @map("events_size")
   apikey         String?  @db.VarChar(64)
   monitorUserId  String?  @map("monitor_user_id") @db.VarChar(100)
   pageUrl        String?  @map("page_url") @db.VarChar(500)

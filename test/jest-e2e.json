@@ -1,0 +1,20 @@
+{
+  "preset": "ts-jest",
+  "rootDir": "..",
+  "testEnvironment": "node",
+  "testRegex": "test/.*\\.e2e-spec\\.ts$",
+  "moduleFileExtensions": ["ts", "js", "json"],
+  "testTimeout": 120000,
+  "maxWorkers": 1,
+  "globalSetup": "<rootDir>/test/setup/global-setup.ts",
+  "globalTeardown": "<rootDir>/test/setup/global-teardown.ts",
+  "moduleNameMapper": {
+    "^@common/(.*)$": "<rootDir>/src/common/$1",
+    "^@modules/(.*)$": "<rootDir>/src/modules/$1",
+    "^@shared/(.*)$": "<rootDir>/src/shared/$1",
+    "^@config/(.*)$": "<rootDir>/src/config/$1",
+    "^@logger/(.*)$": "<rootDir>/src/shared/logger/$1",
+    "^@prisma/(?!client)(.*)$": "<rootDir>/src/shared/prisma/$1",
+    "^@/(.*)$": "<rootDir>/src/$1"
+  }
+}

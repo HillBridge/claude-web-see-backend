@@ -4,6 +4,15 @@ import { PrismaService } from "@shared/prisma/prisma.service";
 import { MinioService } from "@/shared/minio/minio.service";
 import { ReportDataDto } from "./dto/report-data.dto";
 import { buildFingerprint, truncate } from "./utils/fingerprint";
+
+// 网络请求(httpError)的请求/响应体落库上限。超出即截断,防超长 Text 撑大库(同 truncate 防 P2000 思路)。
+const MAX_HTTP_BODY_LEN = 20_000;
+
+// 请求参数/响应体可能是对象或字符串,统一字符串化后落 Text 列;null/undefined 直通。
+function stringifyHttpBody(v: any): string | null {
+  if (v == null) return null;
+  return typeof v === "string" ? v : JSON.stringify(v);
+}
 import { recordScreenObjectKey } from "@/modules/record-screen/record-screen.util";
 import {
   parseEncKey,
@@ -55,6 +64,18 @@ export class ReportService {
     const lineNo = (data as any).lineNo ?? (data as any).line ?? null;
     const colNo = (data as any).colNo ?? (data as any).column ?? null;
 
+    // 网络请求错误的请求/响应信息(@websee/core httpTransform 上报结构):
+    //   顶层: url / elapsedTime / status(注意是 'ok'|'error' 枚举,非 HTTP 码)
+    //   requestData: { httpType, method, data(请求参数/body) }
+    //   response:    { Status(HTTP 状态码,大写 S), data(响应体) }
+    // 非网络错误上报这些路径为 undefined → 全部落 null,无副作用。
+    const req = (data as any).requestData ?? {};
+    const res = (data as any).response ?? {};
+    // HTTP 状态码在 response.Status(大写)且为数字; 顶层 status 是 'ok'/'error' 枚举,
+    // 不能落进 Int 列(否则 Prisma 抛错使整条上报插入失败)。仅接受数字,其余记 null。
+    const rawStatus = res.Status ?? res.status;
+    const responseStatus = typeof rawStatus === "number" ? rawStatus : null;
+
     // 1) 先按指纹归并到错误分组(去重 + 累计次数)
     const fingerprint = buildFingerprint({
       type: data.type,
@@ -94,6 +115,17 @@ export class ReportService {
         fileName,
         lineNo,
         colNo,
+        // 网络请求错误专用字段(仅网络错误落值,其它类型为 null)
+        requestUrl: truncate((data as any).url ?? null, 500),
+        requestMethod: truncate(req.method ?? null, 10),
+        httpType: truncate(req.httpType ?? null, 10),
+        requestData: truncate(stringifyHttpBody(req.data), MAX_HTTP_BODY_LEN),
+        responseStatus,
+        responseData: truncate(stringifyHttpBody(res.data), MAX_HTTP_BODY_LEN),
+        elapsedTime:
+          typeof (data as any).elapsedTime === "number"
+            ? (data as any).elapsedTime
+            : null,
         errorGroupId: group.id,
       },
     });

@@ -62,6 +62,84 @@ describe("ReportService.handleReport 分发", () => {
   });
 });
 
+describe("ReportService.saveError 网络请求(httpError)字段提取", () => {
+  it("xhr/httpError(@websee 上报结构)→ 提取请求方式/参数/响应到 errorReport", async () => {
+    const { service, prisma } = makeService();
+    await service.handleReport({
+      type: "xhr",
+      apikey: "k",
+      message: "https://api.x/login; 请求失败，Status值为:500",
+      url: "https://api.x/login",
+      status: "error", // 顶层 status 是 'ok'/'error' 枚举, 不是 HTTP 码
+      elapsedTime: 1234,
+      requestData: {
+        httpType: "xhr",
+        method: "POST",
+        data: { user: "u" },
+      },
+      response: { Status: 500, data: { msg: "boom" } }, // HTTP 码在 response.Status(大写)
+    } as any);
+
+    const arg = prisma.errorReport.create.mock.calls[0][0].data;
+    expect(arg.requestUrl).toBe("https://api.x/login");
+    expect(arg.requestMethod).toBe("POST");
+    expect(arg.httpType).toBe("xhr");
+    // 对象 body 字符串化后落库
+    expect(arg.requestData).toBe(JSON.stringify({ user: "u" }));
+    // HTTP 码取自 response.Status(数字), 不能取顶层 status('error' 字符串)
+    expect(arg.responseStatus).toBe(500);
+    expect(arg.responseData).toBe(JSON.stringify({ msg: "boom" }));
+    expect(arg.elapsedTime).toBe(1234);
+  });
+
+  it("顶层 status='error' 不得写入 Int 列 responseStatus(防 Prisma 插入失败)", async () => {
+    const { service, prisma } = makeService();
+    await service.handleReport({
+      type: "xhr",
+      apikey: "k",
+      status: "error",
+      response: { data: "boom" }, // 无 Status
+    } as any);
+
+    const arg = prisma.errorReport.create.mock.calls[0][0].data;
+    expect(arg.responseStatus).toBeNull();
+    expect(arg.responseData).toBe("boom");
+  });
+
+  it("普通 error(无网络字段)→ 网络请求字段全部为 null", async () => {
+    const { service, prisma } = makeService();
+    await service.handleReport({
+      type: "error",
+      apikey: "k",
+      message: "boom",
+    } as any);
+
+    const arg = prisma.errorReport.create.mock.calls[0][0].data;
+    expect(arg.requestUrl).toBeNull();
+    expect(arg.requestMethod).toBeNull();
+    expect(arg.httpType).toBeNull();
+    expect(arg.requestData).toBeNull();
+    expect(arg.responseStatus).toBeNull();
+    expect(arg.responseData).toBeNull();
+    expect(arg.elapsedTime).toBeNull();
+  });
+
+  it("字符串形式的请求/响应体直接落库(不二次字符串化)", async () => {
+    const { service, prisma } = makeService();
+    await service.handleReport({
+      type: "httpError",
+      apikey: "k",
+      requestData: { method: "GET", data: "a=1&b=2" },
+      response: { status: 404, data: "Not Found" },
+    } as any);
+
+    const arg = prisma.errorReport.create.mock.calls[0][0].data;
+    expect(arg.requestData).toBe("a=1&b=2");
+    expect(arg.responseData).toBe("Not Found");
+    expect(arg.responseStatus).toBe(404);
+  });
+});
+
 describe("ReportService.saveRecordScreen 写入守卫", () => {
   it("缺 events → 跳过(不写 MinIO/DB)", async () => {
     const { service, prisma, minio } = makeService();

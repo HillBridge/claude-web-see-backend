@@ -12,6 +12,7 @@ import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 const MAX_EVENTS_LEN = 8 * 1024 * 1024; // 录屏 events 字符串 ~8MB
 const MAX_MESSAGE_LEN = 10_000;
 const MAX_BREADCRUMB_LEN = 500;
+const MAX_HTTP_BODY_LEN = 64 * 1024; // 网络请求(httpError)请求/响应体 ~64KB(内存放大兜底)
 
 @ApiTags('数据上报')
 @Controller()
@@ -58,6 +59,16 @@ export class ReportController {
     if (typeof data.events === 'string' && data.events.length > MAX_EVENTS_LEN) return false;
     if (typeof data.message === 'string' && data.message.length > MAX_MESSAGE_LEN) return false;
     if (Array.isArray(data.breadcrumb) && data.breadcrumb.length > MAX_BREADCRUMB_LEN) return false;
+    // 网络请求(httpError)请求参数 / 响应体兜底:字符串化后超限即丢弃(防内存放大)。
+    if (this.httpBodyTooLarge(data.requestData?.data)) return false;
+    if (this.httpBodyTooLarge(data.response?.data)) return false;
     return true;
+  }
+
+  /** httpError 请求/响应体字符串化后是否超限(对象/字符串统一估算) */
+  private httpBodyTooLarge(body: any): boolean {
+    if (body == null) return false;
+    const len = typeof body === 'string' ? body.length : JSON.stringify(body).length;
+    return len > MAX_HTTP_BODY_LEN;
   }
 }

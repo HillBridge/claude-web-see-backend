@@ -71,9 +71,9 @@ describe('A · 鉴权装配 & Guard 顺序 (e2e)', () => {
     expect(res.body.code).toBe(200);
   });
 
-  it('④ @Public 接口 (/getmap) 无 Token 也放行（不返回 401）', async () => {
+  it('④ /getmap 改为需鉴权:无 Token → 401（M2 加固,源码还原走后台登录态，不再 @Public）', async () => {
     const res = await request(http).get('/getmap').query({ fileName: 'x', apikey: 'y' });
-    expect(res.body.code).not.toBe(401);
+    expect(res.body.code).toBe(401);
   });
 
   it('④ @Public 接口 (POST /api/auth/login) 无 Token 可达（凭证错误来自 LocalStrategy 的 401，而非 JwtAuthGuard）', async () => {

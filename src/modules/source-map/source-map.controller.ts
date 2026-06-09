@@ -81,16 +81,20 @@ export class SourceMapController {
     return this.sourceMapService.uploadMapFile(apikey, fileName, content);
   }
 
-  @Public()
-  @ApiOperation({ summary: '获取 JS SourceMap 文件' })
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '获取 JS SourceMap 文件（需登录；apikey 须归属当前用户）' })
   @ApiQuery({ name: 'fileName', description: 'JS 文件名 (不含 .map 后缀)' })
-  @ApiQuery({ name: 'apikey', description: '项目 apikey', required: false })
+  @ApiQuery({ name: 'apikey', description: '项目 apikey' })
   @Get('getmap')
   async getMap(
     @Query('fileName') fileName: string,
     @Query('apikey') apikey: string,
+    @CurrentUser() user: TenantUser,
     @Res() res: Response,
   ) {
+    // 源码还原发生在已登录的管理后台,故 getmap 改为需 JWT(去掉 @Public);
+    // 并校验 apikey 归属当前用户,防止越权读取他人项目的 sourcemap(等同泄露源码)。
+    await assertApikeyAccess(this.prisma, user, apikey);
     const content = await this.sourceMapService.readMapFile(fileName, apikey);
     res.setHeader('Content-Type', 'application/json');
     res.send(content);

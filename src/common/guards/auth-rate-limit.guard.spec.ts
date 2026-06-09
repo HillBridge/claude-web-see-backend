@@ -58,7 +58,7 @@ describe("AuthRateLimitGuard", () => {
     );
   });
 
-  it("存在 X-Forwarded-For 时采信其第一跳(此 guard 无 TRUST_PROXY 开关,登录限流总是采信 XFF)", async () => {
+  it("默认不信任 X-Forwarded-For:伪造 XFF 无法绕过限流,按 TCP 来源 IP 计数", async () => {
     const redis = makeRedis();
     const guard = new AuthRateLimitGuard(redis);
     await guard.canActivate(
@@ -67,9 +67,35 @@ describe("AuthRateLimitGuard", () => {
         socket: { remoteAddress: "1.1.1.1" },
       }),
     );
+    // 未设 TRUST_PROXY → 忽略 XFF,使用 socket.remoteAddress
     expect(redis.redisClient.incr).toHaveBeenCalledWith(
+      "ratelimit:auth:1.1.1.1",
+    );
+    expect(redis.redisClient.incr).not.toHaveBeenCalledWith(
       "ratelimit:auth:8.8.8.8",
     );
+  });
+
+  it("仅当 TRUST_PROXY=true 时才采信 X-Forwarded-For 第一跳", async () => {
+    const prev = process.env.TRUST_PROXY;
+    process.env.TRUST_PROXY = "true";
+    try {
+      const redis = makeRedis();
+      const guard = new AuthRateLimitGuard(redis);
+      await guard.canActivate(
+        ctx({
+          headers: { "x-forwarded-for": "8.8.8.8, 7.7.7.7" },
+          socket: { remoteAddress: "1.1.1.1" },
+        }),
+      );
+      expect(redis.redisClient.incr).toHaveBeenCalledWith(
+        "ratelimit:auth:8.8.8.8",
+      );
+    } finally {
+      // 还原,避免污染其他用例
+      if (prev === undefined) delete process.env.TRUST_PROXY;
+      else process.env.TRUST_PROXY = prev;
+    }
   });
 
   it("remoteAddress=::1 → 归一化为 127.0.0.1", async () => {

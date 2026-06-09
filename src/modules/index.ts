@@ -8,3 +8,4 @@ export { RecordScreenModule } from './record-screen/record-screen.module';
 export { WhiteScreenModule }  from './white-screen/white-screen.module';
 export { SourceMapModule }    from './source-map/source-map.module';
 export { CleanupModule }      from './cleanup/cleanup.module';
+export { LogsModule }         from './logs/logs.module';

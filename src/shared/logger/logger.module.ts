@@ -3,14 +3,17 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
 import 'winston-daily-rotate-file';
+import { PrismaModule } from '../prisma/prisma.module';
+import { PrismaService } from '../prisma/prisma.service';
+import { DbLogTransport } from './db-transport';
 
 @Global()
 @Module({
   imports: [
     WinstonModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
+      imports: [ConfigModule, PrismaModule],
+      inject: [ConfigService, PrismaService],
+      useFactory: (configService: ConfigService, prisma: PrismaService) => {
         const env = configService.get<string>('app.env');
         const logLevel = configService.get<string>('logger.level') || 'info';
 
@@ -36,6 +39,8 @@ import 'winston-daily-rotate-file';
           new winston.transports.Console({
             format: consoleFormat,
           }),
+          // warn 及以上落库,供管理端 /api/logs 查看(dev/prod 都挂,dev 也能在 UI 看到)
+          new DbLogTransport(prisma, { level: 'warn' }),
         ];
 
         // 生产环境写入日志文件

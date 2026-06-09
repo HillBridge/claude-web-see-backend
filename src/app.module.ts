@@ -21,6 +21,7 @@ import {
   WhiteScreenModule,
   SourceMapModule,
   CleanupModule,
+  LogsModule,
 } from './modules';
 
 @Module({
@@ -43,6 +44,7 @@ import {
     WhiteScreenModule,
     SourceMapModule,
     CleanupModule,
+    LogsModule,
   ],
   providers: [
     { provide: APP_GUARD,       useClass: JwtAuthGuard },         // 1. 先验证 JWT

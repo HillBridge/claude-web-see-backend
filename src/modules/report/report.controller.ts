@@ -1,4 +1,4 @@
-import { Controller, Post, Req, Body, HttpCode, UseGuards } from '@nestjs/common';
+import { Controller, Post, Req, Body, HttpCode, UseGuards, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Request } from 'express';
 import { ReportService } from './report.service';
@@ -17,6 +17,7 @@ const MAX_HTTP_BODY_LEN = 64 * 1024; // 网络请求(httpError)请求/响应体 
 @ApiTags('数据上报')
 @Controller()
 export class ReportController {
+  private readonly logger = new Logger(ReportController.name);
   constructor(private reportService: ReportService) {}
 
   @Public()
@@ -39,7 +40,16 @@ export class ReportController {
     }
 
     // ── 轻量校验 + 体积兜底(无效/超限静默丢弃,不写库,避免脏数据与内存放大)──
-    if (!this.isAcceptable(data)) {
+    const dropReason = this.rejectReason(data);
+    if (dropReason) {
+      // 录屏被丢弃是真实数据丢失(常见 events 超 8MB),用 warn 便于排查;其余脏数据用 debug 防噪音
+      if (data?.type === 'recordScreen') {
+        this.logger.warn(
+          `录屏上报被丢弃: reason=${dropReason} apikey=${data?.apikey} recordScreenId=${data?.recordScreenId}`,
+        );
+      } else {
+        this.logger.debug(`上报被丢弃: reason=${dropReason} type=${data?.type}`);
+      }
       return { code: 200, message: '上报成功' };
     }
 
@@ -51,18 +61,21 @@ export class ReportController {
     }
   }
 
-  /** 必填字段与体积约束;任一不满足则视为无效上报 */
-  private isAcceptable(data: any): boolean {
-    if (!data || typeof data !== 'object') return false;
-    if (typeof data.type !== 'string' || !data.type) return false;
-    if (typeof data.apikey !== 'string' || !data.apikey) return false;
-    if (typeof data.events === 'string' && data.events.length > MAX_EVENTS_LEN) return false;
-    if (typeof data.message === 'string' && data.message.length > MAX_MESSAGE_LEN) return false;
-    if (Array.isArray(data.breadcrumb) && data.breadcrumb.length > MAX_BREADCRUMB_LEN) return false;
+  /** 返回丢弃原因(null = 可接受);任一必填缺失或体积超限即视为无效上报 */
+  private rejectReason(data: any): string | null {
+    if (!data || typeof data !== 'object') return 'empty';
+    if (typeof data.type !== 'string' || !data.type) return 'missing-type';
+    if (typeof data.apikey !== 'string' || !data.apikey) return 'missing-apikey';
+    if (typeof data.events === 'string' && data.events.length > MAX_EVENTS_LEN)
+      return `events-too-large(${data.events.length}>${MAX_EVENTS_LEN})`;
+    if (typeof data.message === 'string' && data.message.length > MAX_MESSAGE_LEN)
+      return 'message-too-large';
+    if (Array.isArray(data.breadcrumb) && data.breadcrumb.length > MAX_BREADCRUMB_LEN)
+      return 'breadcrumb-too-large';
     // 网络请求(httpError)请求参数 / 响应体兜底:字符串化后超限即丢弃(防内存放大)。
-    if (this.httpBodyTooLarge(data.requestData?.data)) return false;
-    if (this.httpBodyTooLarge(data.response?.data)) return false;
-    return true;
+    if (this.httpBodyTooLarge(data.requestData?.data)) return 'requestData-too-large';
+    if (this.httpBodyTooLarge(data.response?.data)) return 'response-too-large';
+    return null;
   }
 
   /** httpError 请求/响应体字符串化后是否超限(对象/字符串统一估算) */

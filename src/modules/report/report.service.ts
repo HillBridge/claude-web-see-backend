@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "@shared/prisma/prisma.service";
 import { MinioService } from "@/shared/minio/minio.service";
@@ -21,6 +21,7 @@ import {
 
 @Injectable()
 export class ReportService {
+  private readonly logger = new Logger(ReportService.name);
   // 录屏加密密钥(可选):配置则新写入加密,未配置则明文。启动时解析一次,非法长度即暴露。
   private readonly recordScreenEncKey: Buffer | null;
 
@@ -169,11 +170,22 @@ export class ReportService {
   }
 
   private async saveRecordScreen(data: ReportDataDto) {
-    if (!data.recordScreenId || !data.events) return;
+    if (!data.recordScreenId || !data.events) {
+      this.logger.warn(
+        `录屏丢弃: 缺少 ${!data.recordScreenId ? "recordScreenId" : "events"} (recordScreenId=${data.recordScreenId})`,
+      );
+      return;
+    }
     // apikey 已由 ApiKeyAuthGuard 校验;无 apikey 不落库,避免落到 NULL 分区绕过复合唯一去重
-    if (!data.apikey) return;
+    if (!data.apikey) {
+      this.logger.warn(`录屏丢弃: 缺少 apikey (recordScreenId=${data.recordScreenId})`);
+      return;
+    }
     // recordScreenId 会拼进 MinIO 对象 key,格式非法则静默丢弃(纵深防御,见 record-screen.util)
-    if (!isValidRecordScreenId(data.recordScreenId)) return;
+    if (!isValidRecordScreenId(data.recordScreenId)) {
+      this.logger.warn(`录屏丢弃: recordScreenId 格式非法 (${data.recordScreenId})`);
+      return;
+    }
 
     // events 大字段落 MinIO,DB 只存对象 key + 字节数。key 按 (apikey, recordScreenId) 确定性命名,
     // 重复投递覆盖同一对象,与下方 upsert 的覆盖语义一致(幂等)。

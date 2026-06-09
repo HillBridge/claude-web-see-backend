@@ -22,10 +22,15 @@ export class UpdateUserDto {
   @IsEmail()
   email?: string;
 
+  @ApiPropertyOptional({ example: 'oldpassword123', description: '本人修改密码时必填,用于校验身份' })
+  @IsOptional()
+  @IsString()
+  oldPassword?: string;
+
   @ApiPropertyOptional({ example: 'newpassword123' })
   @IsOptional()
   @IsString()
-  @MinLength(6)
+  @MinLength(8)
   newPassword?: string;
 
   @ApiPropertyOptional({ enum: Role })

@@ -40,8 +40,15 @@ async function bootstrap() {
   );
 
   // ── CORS ───────────────────────────────────────────────────
-  // CORS_ORIGINS 为逗号分隔白名单;未配置时回退 '*'(兼容旧行为,生产建议配置)
+  // CORS_ORIGINS 为逗号分隔白名单。生产环境必须显式配置,拒绝以 '*' 启动(防任意源跨域);
+  // 非生产环境未配置时回退 '*' 方便本地开发联调。
   const corsOrigins = process.env.CORS_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean);
+  const isProd = configService.get('app.env') === 'production';
+  if (isProd && (!corsOrigins || corsOrigins.length === 0)) {
+    throw new Error(
+      '生产环境必须配置 CORS_ORIGINS(逗号分隔白名单),拒绝以 * 启动',
+    );
+  }
   app.enableCors({
     origin: corsOrigins && corsOrigins.length > 0 ? corsOrigins : '*',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

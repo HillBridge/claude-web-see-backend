@@ -12,9 +12,9 @@ export class RegisterDto {
   @IsEmail({}, { message: '邮箱格式不正确' })
   email: string;
 
-  @ApiProperty({ example: 'password123', description: '密码最少 6 位' })
+  @ApiProperty({ example: 'password123', description: '密码最少 8 位' })
   @IsString()
-  @MinLength(6)
+  @MinLength(8)
   @MaxLength(50)
   password: string;
 }

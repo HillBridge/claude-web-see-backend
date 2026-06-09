@@ -11,3 +11,13 @@ export function recordScreenObjectKey(
 ): string {
   return `record-screen/${apikey}/${recordScreenId}`;
 }
+
+/**
+ * recordScreenId 由 SDK 上报、且会拼进 MinIO 对象 key,限定字符集(字母数字 + _- ,1~128 位)
+ * 作为纵深防御,避免异常字符进入对象 key。
+ * (跨租户覆盖已由 DB 的 @@unique([apikey, recordScreenId]) upsert 在租户内定位阻断,此处为额外加固。)
+ */
+const RECORD_SCREEN_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+export function isValidRecordScreenId(id: unknown): boolean {
+  return typeof id === 'string' && RECORD_SCREEN_ID_RE.test(id);
+}

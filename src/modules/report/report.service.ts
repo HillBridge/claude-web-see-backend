@@ -13,7 +13,7 @@ function stringifyHttpBody(v: any): string | null {
   if (v == null) return null;
   return typeof v === "string" ? v : JSON.stringify(v);
 }
-import { recordScreenObjectKey } from "@/modules/record-screen/record-screen.util";
+import { recordScreenObjectKey, isValidRecordScreenId } from "@/modules/record-screen/record-screen.util";
 import {
   parseEncKey,
   encryptEvents,
@@ -172,6 +172,8 @@ export class ReportService {
     if (!data.recordScreenId || !data.events) return;
     // apikey 已由 ApiKeyAuthGuard 校验;无 apikey 不落库,避免落到 NULL 分区绕过复合唯一去重
     if (!data.apikey) return;
+    // recordScreenId 会拼进 MinIO 对象 key,格式非法则静默丢弃(纵深防御,见 record-screen.util)
+    if (!isValidRecordScreenId(data.recordScreenId)) return;
 
     // events 大字段落 MinIO,DB 只存对象 key + 字节数。key 按 (apikey, recordScreenId) 确定性命名,
     // 重复投递覆盖同一对象,与下方 upsert 的覆盖语义一致(幂等)。

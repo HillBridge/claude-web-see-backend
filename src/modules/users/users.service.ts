@@ -3,6 +3,8 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '@shared/prisma/prisma.service';
@@ -83,7 +85,20 @@ export class UsersService {
     if (dto.email) updateData.email = dto.email;
     // 普通用户不可自行提升权限
     if (dto.role && currentUser.role === 'ADMIN') updateData.role = dto.role;
-    if (dto.newPassword) updateData.password = await bcrypt.hash(dto.newPassword, 10);
+    if (dto.newPassword) {
+      // 本人改密必须校验旧密码,防 session 被劫持后静默改密接管账户;
+      // Admin 重置他人密码属管理操作,不要求旧密码。
+      if (currentUser.id === id) {
+        if (!dto.oldPassword) {
+          throw new BadRequestException('修改密码需提供原密码');
+        }
+        const matched = await bcrypt.compare(dto.oldPassword, user.password);
+        if (!matched) {
+          throw new UnauthorizedException('原密码不正确');
+        }
+      }
+      updateData.password = await bcrypt.hash(dto.newPassword, 10);
+    }
 
     return this.prisma.user.update({
       where: { id },

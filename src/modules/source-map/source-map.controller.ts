@@ -24,6 +24,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { assertApikeyAccess, TenantUser } from '@/common/utils/tenant-scope';
@@ -65,7 +66,7 @@ export class SourceMapController {
     @Headers('x-upload-secret') secret: string,
   ) {
     const expected = this.configService.get<string>('sourcemapUploadSecret');
-    if (!expected || secret !== expected) {
+    if (!expected || !this.secretEquals(secret, expected)) {
       throw new UnauthorizedException('X-Upload-Secret 无效');
     }
     if (!file) {
@@ -122,5 +123,15 @@ export class SourceMapController {
     await assertApikeyAccess(this.prisma, user, apikey);
     await this.sourceMapService.deleteMapFile(apikey, fileName);
     return { message: '删除成功' };
+  }
+
+  /** 恒定时间比较上传密钥,避免 !== 短路比较带来的时序侧信道 */
+  private secretEquals(a: string, b: string): boolean {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    const ab = Buffer.from(a);
+    const bb = Buffer.from(b);
+    // 长度不一致直接判否(timingSafeEqual 要求等长 Buffer)
+    if (ab.length !== bb.length) return false;
+    return crypto.timingSafeEqual(ab, bb);
   }
 }

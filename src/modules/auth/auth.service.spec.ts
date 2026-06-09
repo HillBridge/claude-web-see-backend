@@ -98,6 +98,21 @@ describe("AuthService.register", () => {
     );
   });
 
+  it("用户名占用与邮箱占用返回相同提示(防用户枚举)", async () => {
+    const byUsername = makeService({
+      users: { findByUsername: jest.fn().mockResolvedValue({ id: 1 }) },
+    });
+    const byEmail = makeService({
+      users: {
+        findByUsername: jest.fn().mockResolvedValue(null),
+        findByEmail: jest.fn().mockResolvedValue({ id: 2 }),
+      },
+    });
+    const m1 = await byUsername.service.register(dto).catch((e) => e.message);
+    const m2 = await byEmail.service.register(dto).catch((e) => e.message);
+    expect(m1).toBe(m2);
+  });
+
   it("成功注册 → 密码经 bcrypt 哈希存储,颁发 token", async () => {
     const created = { id: 9, username: "new", email: "n@e.com", role: "USER" };
     const create = jest.fn().mockResolvedValue(created);

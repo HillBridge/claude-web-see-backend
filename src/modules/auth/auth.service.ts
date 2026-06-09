@@ -52,13 +52,11 @@ export class AuthService {
 
   /** 注册新用户 */
   async register(dto: RegisterDto) {
+    // 合并用户名/邮箱占用提示为统一文案,避免暴露"某用户名/邮箱是否已注册"(用户枚举)。
     const existingUser = await this.usersService.findByUsername(dto.username);
-    if (existingUser) {
-      throw new ConflictException('用户名已被占用');
-    }
     const existingEmail = await this.usersService.findByEmail(dto.email);
-    if (existingEmail) {
-      throw new ConflictException('邮箱已被注册');
+    if (existingUser || existingEmail) {
+      throw new ConflictException('用户名或邮箱已被占用');
     }
 
     const hashed = await bcrypt.hash(dto.password, 10);

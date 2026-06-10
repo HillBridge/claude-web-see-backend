@@ -8,6 +8,9 @@ import { buildFingerprint, truncate } from "./utils/fingerprint";
 // 网络请求(httpError)的请求/响应体落库上限。超出即截断,防超长 Text 撑大库(同 truncate 防 P2000 思路)。
 const MAX_HTTP_BODY_LEN = 20_000;
 
+// 只落库的标量 Web Vitals(参与 p75/good 分析);longTask/resourceList/memory 等非标量事件丢弃。
+const SCALAR_PERF_METRICS = new Set(["FCP", "LCP", "FID", "CLS", "TTFB", "FSP"]);
+
 // 请求参数/响应体可能是对象或字符串,统一字符串化后落 Text 列;null/undefined 直通。
 function stringifyHttpBody(v: any): string | null {
   if (v == null) return null;
@@ -147,19 +150,17 @@ export class ReportService {
   }
 
   private async savePerformance(data: ReportDataDto) {
-    // SDK(@websee/performance) 按"一指标一条"上报: {name, value, rating} 标量指标,
-    // 或 longTask/resourceList/memory 等非标量事件。长格式直存,贴合上报契约。
+    // SDK(@websee/performance) 按"一指标一条"上报: 标量 Web Vitals {name,value,rating},
+    // 外加 longTask/resourceList/memory 等非标量事件。只保留标量指标(参与 p75/good 分析),
+    // 非标量事件不落库(避免 71% 噪声行膨胀表与样本计数)。
     const name = typeof data.name === "string" ? data.name : null;
-    if (!name) return; // 无 name 的脏数据静默丢弃(沿用上报入口"脏数据不落库"约定)
-    // 标量指标存 value; 非标量事件(longTask/resourceList/memory)存 detail
-    const detail = data.longTask ?? data.resourceList ?? data.memory ?? undefined;
+    if (!name || !SCALAR_PERF_METRICS.has(name)) return; // 无 name 或非标量事件 → 静默丢弃
     await this.prisma.performanceReport.create({
       data: {
         apikey: data.apikey || "unknown",
         name,
         value: typeof data.value === "number" ? data.value : null,
         rating: data.rating ?? null,
-        detail: detail as any,
         pageUrl: data.pageUrl,
         time: data.time ? BigInt(data.time) : null,
         monitorUserId: data.userId,

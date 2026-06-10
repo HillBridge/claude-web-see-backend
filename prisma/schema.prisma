@@ -150,17 +150,16 @@ model Breadcrumb {
 
 // ============================================================
 // 性能数据上报表（长格式：一指标一行）
-// SDK(@websee/performance) 按 {name,value,rating} 逐指标上报，外加
-// longTask/resourceList/memory 等非标量事件。故采用长格式直存，贴合
-// 上报契约且新增指标免迁移；按天聚合到 performance_daily_stats 供查询。
+// SDK(@websee/performance) 按 {name,value,rating} 逐指标上报标量 Web Vitals
+// (FCP/LCP/FID/CLS/TTFB/FSP)；仅这些标量指标落库,非标量事件(longTask/
+// resourceList/memory)在入库层丢弃。按天聚合到 performance_daily_stats 供查询。
 // ============================================================
 model PerformanceReport {
   id            Int      @id @default(autoincrement())
   apikey        String   @db.VarChar(64)
-  name          String   @db.VarChar(32) // 指标/事件名: FCP/LCP/FID/CLS/TTFB/FSP/longTask/resourceList/memory
-  value         Decimal? @db.Decimal(12, 4) // 标量指标值(ms 或 CLS 无量纲); 非标量事件为 null
+  name          String   @db.VarChar(32) // 指标名: FCP/LCP/FID/CLS/TTFB/FSP
+  value         Decimal? @db.Decimal(12, 4) // 标量指标值(ms 或 CLS 无量纲)
   rating        String?  @db.VarChar(20) // good/needs-improvement/poor
-  detail        Json? // 非标量事件明细(longTask/resourceList/memory)
   pageUrl       String?  @map("page_url") @db.VarChar(500)
   time          BigInt?
   monitorUserId String?  @map("monitor_user_id") @db.VarChar(100)

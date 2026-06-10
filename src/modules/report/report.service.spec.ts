@@ -54,6 +54,14 @@ describe("ReportService.handleReport 分发", () => {
     expect(prisma.performanceReport.create).not.toHaveBeenCalled();
   });
 
+  it("type=performance 非标量事件(longTask/resourceList/memory)→ 不落库", async () => {
+    const { service, prisma } = makeService();
+    await service.handleReport({ type: "performance", apikey: "k", name: "longTask", longTask: {} } as any);
+    await service.handleReport({ type: "performance", apikey: "k", name: "resourceList", resourceList: [] } as any);
+    await service.handleReport({ type: "performance", apikey: "k", name: "memory", memory: {} } as any);
+    expect(prisma.performanceReport.create).not.toHaveBeenCalled();
+  });
+
   it("type=whiteScreen → 写 whiteScreen", async () => {
     const { service, prisma } = makeService();
     await service.handleReport({ type: "whiteScreen", apikey: "k" } as any);

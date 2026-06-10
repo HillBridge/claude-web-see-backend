@@ -93,8 +93,8 @@ export class ReportDataDto {
   @IsString()
   events?: string;
 
-  // ── 性能字段(SDK 长格式:一指标一条)──────────────────────
-  @ApiPropertyOptional({ description: '指标/事件名: FCP/LCP/FID/CLS/TTFB/FSP/longTask/resourceList/memory' })
+  // ── 性能字段(SDK 长格式:一指标一条,仅标量 Web Vitals 落库)──
+  @ApiPropertyOptional({ description: '指标名: FCP/LCP/FID/CLS/TTFB/FSP' })
   @IsOptional()
   @IsString()
   name?: string;
@@ -108,9 +108,4 @@ export class ReportDataDto {
   @IsOptional()
   @IsString()
   rating?: string;
-
-  // 非标量性能事件明细(结构不固定,直存)
-  @ApiPropertyOptional() @IsOptional() longTask?: any;
-  @ApiPropertyOptional() @IsOptional() resourceList?: any;
-  @ApiPropertyOptional() @IsOptional() memory?: any;
 }

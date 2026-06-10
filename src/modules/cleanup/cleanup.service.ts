@@ -10,7 +10,6 @@ const RETENTION = {
   whiteScreen: 90,
   performanceRaw: 30,
   performanceStat: 365,
-  systemLog: 30,
 } as const;
 
 interface DailyAggRow {
@@ -49,7 +48,6 @@ export class CleanupService {
     await this.deleteOldRecordScreens();
     await this.deleteOldWhiteScreens();
     await this.deleteOldPerformanceStats();
-    await this.deleteOldSystemLogs();
     this.logger.log("=== 数据清理完成 ===");
   }
 
@@ -191,14 +189,6 @@ export class CleanupService {
     this.logger.log(
       `删除日聚合统计: ${count} 条（>${RETENTION.performanceStat}天）`,
     );
-  }
-
-  private async deleteOldSystemLogs() {
-    const cutoff = daysAgo(RETENTION.systemLog);
-    const { count } = await this.prisma.systemLog.deleteMany({
-      where: { createdAt: { lt: cutoff } },
-    });
-    this.logger.log(`删除系统日志: ${count} 条（>${RETENTION.systemLog}天）`);
   }
 }
 

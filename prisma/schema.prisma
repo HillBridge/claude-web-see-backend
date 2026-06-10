@@ -265,20 +265,3 @@ model WhiteScreen {
   @@index([createdAt])
   @@map("white_screens")
 }
-
-// ============================================================
-// 系统运行日志表(winston warn/error 落库,供管理端 /api/logs 查看)
-// 仅持久化 warn 及以上,控制写入量;非租户数据,管理端 ADMIN 专属查询。
-// ============================================================
-model SystemLog {
-  id        Int      @id @default(autoincrement())
-  level     String   @db.VarChar(10)  // warn | error
-  context   String?  @db.VarChar(100) // logger 名,如 ReportController
-  message   String   @db.Text
-  meta      Json?    // 结构化附加信息(预留)
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([level])
-  @@index([createdAt])
-  @@map("system_logs")
-}

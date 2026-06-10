@@ -71,25 +71,6 @@ describe('A · 鉴权装配 & Guard 顺序 (e2e)', () => {
     expect(res.body.code).toBe(200);
   });
 
-  it('③ 普通用户查 /api/logs → 403(系统日志 ADMIN 专属)', async () => {
-    const user: SeededUser = await registerUser(app);
-    const res = await request(http)
-      .get('/api/logs')
-      .set('Authorization', `Bearer ${user.token}`);
-    expect(res.body.code).toBe(403);
-  });
-
-  it('③ ADMIN 查 /api/logs → 放行 (code=200, 返回分页结构)', async () => {
-    let admin = await registerUser(app);
-    admin = await makeAdmin(app, prisma, admin);
-    const res = await request(http)
-      .get('/api/logs')
-      .set('Authorization', `Bearer ${admin.token}`);
-    expect(res.body.code).toBe(200);
-    expect(res.body.data).toHaveProperty('list');
-    expect(res.body.data).toHaveProperty('total');
-  });
-
   it('④ /getmap 改为需鉴权:无 Token → 401（M2 加固,源码还原走后台登录态，不再 @Public）', async () => {
     const res = await request(http).get('/getmap').query({ fileName: 'x', apikey: 'y' });
     expect(res.body.code).toBe(401);

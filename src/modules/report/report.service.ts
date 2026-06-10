@@ -162,10 +162,6 @@ export class ReportService {
         value: typeof data.value === "number" ? data.value : null,
         rating: data.rating ?? null,
         pageUrl: data.pageUrl,
-        time: data.time ? BigInt(data.time) : null,
-        monitorUserId: data.userId,
-        sdkVersion: data.sdkVersion,
-        deviceInfo: data.deviceInfo ?? undefined,
       },
     });
   }

@@ -161,10 +161,6 @@ model PerformanceReport {
   value         Decimal? @db.Decimal(12, 4) // 标量指标值(ms 或 CLS 无量纲)
   rating        String?  @db.VarChar(20) // good/needs-improvement/poor
   pageUrl       String?  @map("page_url") @db.VarChar(500)
-  time          BigInt?
-  monitorUserId String?  @map("monitor_user_id") @db.VarChar(100)
-  sdkVersion    String?  @map("sdk_version") @db.VarChar(20)
-  deviceInfo    Json?    @map("device_info")
   createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([apikey])

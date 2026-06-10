@@ -93,15 +93,24 @@ export class ReportDataDto {
   @IsString()
   events?: string;
 
-  // ── 性能字段 ──────────────────────────────────────────────
-  @ApiPropertyOptional() @IsOptional() @IsNumber() fp?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() fcp?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() lcp?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() fid?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() cls?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() ttfb?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() dns?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() tcp?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() ssl?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() loadTime?: number;
+  // ── 性能字段(SDK 长格式:一指标一条)──────────────────────
+  @ApiPropertyOptional({ description: '指标/事件名: FCP/LCP/FID/CLS/TTFB/FSP/longTask/resourceList/memory' })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ description: '标量指标值(ms 或 CLS 无量纲)' })
+  @IsOptional()
+  @IsNumber()
+  value?: number;
+
+  @ApiPropertyOptional({ description: '评级 good/needs-improvement/poor' })
+  @IsOptional()
+  @IsString()
+  rating?: string;
+
+  // 非标量性能事件明细(结构不固定,直存)
+  @ApiPropertyOptional() @IsOptional() longTask?: any;
+  @ApiPropertyOptional() @IsOptional() resourceList?: any;
+  @ApiPropertyOptional() @IsOptional() memory?: any;
 }

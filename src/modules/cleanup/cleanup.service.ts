@@ -51,7 +51,8 @@ export class CleanupService {
     this.logger.log("=== 数据清理完成 ===");
   }
 
-  // PerformanceReport: 将 30~365 天前的原始数据聚合为每日均值
+  // PerformanceReport(长格式,一指标一行): 将 30~365 天前的原始数据按 name 透视聚合为每日均值。
+  // sample_count = 当日该项目的标量指标数据点数(非页面加载次数)。
   private async aggregatePerformance() {
     const cutoff = daysAgo(RETENTION.performanceRaw);
     const oldest = daysAgo(RETENTION.performanceStat);
@@ -60,20 +61,21 @@ export class CleanupService {
       SELECT
         DATE(created_at)   AS stat_date,
         apikey,
-        COUNT(*)           AS sample_count,
-        AVG(fp)            AS avg_fp,
-        AVG(fcp)           AS avg_fcp,
-        AVG(lcp)           AS avg_lcp,
-        AVG(fid)           AS avg_fid,
-        AVG(cls)           AS avg_cls,
-        AVG(ttfb)          AS avg_ttfb,
-        AVG(dns)           AS avg_dns,
-        AVG(tcp)           AS avg_tcp,
-        AVG(ssl)           AS avg_ssl,
-        AVG(load_time)     AS avg_load_time
+        COUNT(value)                                   AS sample_count,
+        AVG(CASE WHEN name = 'FP'       THEN value END) AS avg_fp,
+        AVG(CASE WHEN name = 'FCP'      THEN value END) AS avg_fcp,
+        AVG(CASE WHEN name = 'LCP'      THEN value END) AS avg_lcp,
+        AVG(CASE WHEN name = 'FID'      THEN value END) AS avg_fid,
+        AVG(CASE WHEN name = 'CLS'      THEN value END) AS avg_cls,
+        AVG(CASE WHEN name = 'TTFB'     THEN value END) AS avg_ttfb,
+        AVG(CASE WHEN name = 'DNS'      THEN value END) AS avg_dns,
+        AVG(CASE WHEN name = 'TCP'      THEN value END) AS avg_tcp,
+        AVG(CASE WHEN name = 'SSL'      THEN value END) AS avg_ssl,
+        AVG(CASE WHEN name = 'loadTime' THEN value END) AS avg_load_time
       FROM performance_reports
       WHERE created_at < ${cutoff}
         AND created_at >= ${oldest}
+        AND value IS NOT NULL
       GROUP BY DATE(created_at), apikey
     `;
 

@@ -149,33 +149,28 @@ model Breadcrumb {
 }
 
 // ============================================================
-// 性能数据上报表
-// 包含 Web Vitals: FP/FCP/LCP/FID/CLS/TTFB 及网络时序
+// 性能数据上报表（长格式：一指标一行）
+// SDK(@websee/performance) 按 {name,value,rating} 逐指标上报，外加
+// longTask/resourceList/memory 等非标量事件。故采用长格式直存，贴合
+// 上报契约且新增指标免迁移；按天聚合到 performance_daily_stats 供查询。
 // ============================================================
 model PerformanceReport {
   id            Int      @id @default(autoincrement())
+  apikey        String   @db.VarChar(64)
+  name          String   @db.VarChar(32) // 指标/事件名: FCP/LCP/FID/CLS/TTFB/FSP/longTask/resourceList/memory
+  value         Decimal? @db.Decimal(12, 4) // 标量指标值(ms 或 CLS 无量纲); 非标量事件为 null
+  rating        String?  @db.VarChar(20) // good/needs-improvement/poor
+  detail        Json? // 非标量事件明细(longTask/resourceList/memory)
   pageUrl       String?  @map("page_url") @db.VarChar(500)
   time          BigInt?
-  apikey        String   @db.VarChar(64)
   monitorUserId String?  @map("monitor_user_id") @db.VarChar(100)
   sdkVersion    String?  @map("sdk_version") @db.VarChar(20)
   deviceInfo    Json?    @map("device_info")
-  // Web Vitals (毫秒)
-  fp            Decimal? @db.Decimal(10, 2)
-  fcp           Decimal? @db.Decimal(10, 2)
-  lcp           Decimal? @db.Decimal(10, 2)
-  fid           Decimal? @db.Decimal(10, 2)
-  cls           Decimal? @db.Decimal(10, 4)
-  ttfb          Decimal? @db.Decimal(10, 2)
-  // 网络时序 (毫秒)
-  dns           Decimal? @db.Decimal(10, 2)
-  tcp           Decimal? @db.Decimal(10, 2)
-  ssl           Decimal? @db.Decimal(10, 2)
-  loadTime      Decimal? @map("load_time") @db.Decimal(10, 2)
   createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([apikey])
   @@index([createdAt])
+  @@index([apikey, name]) // 聚合/查询按 name 分组
   @@map("performance_reports")
 }
 

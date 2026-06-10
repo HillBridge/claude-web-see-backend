@@ -41,10 +41,43 @@ export class PerformanceService {
   async getAvgMetrics(apikey: string, user: TenantUser) {
     // 仅允许查询自己拥有项目的指标
     await assertApikeyAccess(this.prisma, user, apikey);
-    return this.prisma.performanceReport.aggregate({
-      where: { apikey },
-      _avg: { fp: true, fcp: true, lcp: true, fid: true, cls: true, ttfb: true, loadTime: true },
-      _count: true,
+    // 长格式原始表按 name 分组求均值(覆盖未聚合的近 30 天数据)
+    const groups = await this.prisma.performanceReport.groupBy({
+      by: ['name'],
+      where: { apikey, value: { not: null } },
+      _avg: { value: true },
+      _count: { _all: true },
+    });
+    // reshape 成 { 指标名: { avg, count } } + 总样本数
+    const avg: Record<string, { avg: number | null; count: number }> = {};
+    let total = 0;
+    for (const g of groups) {
+      avg[g.name] = {
+        avg: g._avg.value != null ? Number(g._avg.value) : null,
+        count: g._count._all,
+      };
+      total += g._count._all;
+    }
+    return { apikey, total, avg };
+  }
+
+  // 历史趋势: 读宽聚合表 performance_daily_stats(聚合服务层,覆盖 30~365 天)
+  async getDailyStats(
+    apikey: string,
+    user: TenantUser,
+    startTime?: number,
+    endTime?: number,
+  ) {
+    await assertApikeyAccess(this.prisma, user, apikey);
+    const where: any = { apikey };
+    if (startTime || endTime) {
+      where.statDate = {};
+      if (startTime) where.statDate.gte = new Date(startTime);
+      if (endTime) where.statDate.lte = new Date(endTime);
+    }
+    return this.prisma.performanceDailyStat.findMany({
+      where,
+      orderBy: { statDate: 'asc' },
     });
   }
 }

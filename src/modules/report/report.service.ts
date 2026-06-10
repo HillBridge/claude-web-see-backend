@@ -147,24 +147,24 @@ export class ReportService {
   }
 
   private async savePerformance(data: ReportDataDto) {
+    // SDK(@websee/performance) 按"一指标一条"上报: {name, value, rating} 标量指标,
+    // 或 longTask/resourceList/memory 等非标量事件。长格式直存,贴合上报契约。
+    const name = typeof data.name === "string" ? data.name : null;
+    if (!name) return; // 无 name 的脏数据静默丢弃(沿用上报入口"脏数据不落库"约定)
+    // 标量指标存 value; 非标量事件(longTask/resourceList/memory)存 detail
+    const detail = data.longTask ?? data.resourceList ?? data.memory ?? undefined;
     await this.prisma.performanceReport.create({
       data: {
+        apikey: data.apikey || "unknown",
+        name,
+        value: typeof data.value === "number" ? data.value : null,
+        rating: data.rating ?? null,
+        detail: detail as any,
         pageUrl: data.pageUrl,
         time: data.time ? BigInt(data.time) : null,
-        apikey: data.apikey || "unknown",
         monitorUserId: data.userId,
         sdkVersion: data.sdkVersion,
         deviceInfo: data.deviceInfo ?? undefined,
-        fp: data.fp ?? null,
-        fcp: data.fcp ?? null,
-        lcp: data.lcp ?? null,
-        fid: data.fid ?? null,
-        cls: data.cls ?? null,
-        ttfb: data.ttfb ?? null,
-        dns: data.dns ?? null,
-        tcp: data.tcp ?? null,
-        ssl: data.ssl ?? null,
-        loadTime: data.loadTime ?? null,
       },
     });
   }

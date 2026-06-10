@@ -32,10 +32,26 @@ describe("ReportService.handleReport 分发", () => {
     expect(prisma.errorGroup.upsert).not.toHaveBeenCalled();
   });
 
-  it("type=performance → 写 performanceReport", async () => {
+  it("type=performance(长格式)→ 写 performanceReport,映射 name/value", async () => {
+    const { service, prisma } = makeService();
+    await service.handleReport({
+      type: "performance",
+      apikey: "k",
+      name: "FCP",
+      value: 1234,
+      rating: "good",
+    } as any);
+    expect(prisma.performanceReport.create).toHaveBeenCalled();
+    const arg = prisma.performanceReport.create.mock.calls[0][0].data;
+    expect(arg.name).toBe("FCP");
+    expect(arg.value).toBe(1234);
+    expect(arg.rating).toBe("good");
+  });
+
+  it("type=performance 缺 name → 静默丢弃(不落库)", async () => {
     const { service, prisma } = makeService();
     await service.handleReport({ type: "performance", apikey: "k" } as any);
-    expect(prisma.performanceReport.create).toHaveBeenCalled();
+    expect(prisma.performanceReport.create).not.toHaveBeenCalled();
   });
 
   it("type=whiteScreen → 写 whiteScreen", async () => {

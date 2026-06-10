@@ -23,6 +23,16 @@ export class PerformanceController {
     return this.performanceService.getAvgMetrics(apikey, user);
   }
 
+  @ApiOperation({ summary: '某项目性能每日聚合趋势' })
+  @Get('stats/:apikey')
+  getStats(
+    @Param('apikey') apikey: string,
+    @Query() query: QueryPerformanceDto,
+    @CurrentUser() user: TenantUser,
+  ) {
+    return this.performanceService.getDailyStats(apikey, user, query.startTime, query.endTime);
+  }
+
   @ApiOperation({ summary: '性能数据详情' })
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: TenantUser) {

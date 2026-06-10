@@ -218,28 +218,28 @@ model SourceMapFile {
 }
 
 // ============================================================
-// 性能日聚合统计表（原始数据 30 天后归档到此，最长保留 1 年）
+// 性能日聚合统计表（长格式：天×项目×页面×指标，原始数据 30 天后归档到此，最长保留 1 年）
+// 存 p75/p95(分位,CWV 标准口径) + good/ni/poor 计数(rating 分桶,跨范围可合并算 good%)。
+// 按页面(归一化 path+hash,去 query)拆分,支持按页面/按天的性能分析。
 // ============================================================
 model PerformanceDailyStat {
   id          Int      @id @default(autoincrement())
   statDate    DateTime @map("stat_date") @db.Date
   apikey      String   @db.VarChar(64)
-  sampleCount Int      @map("sample_count")
-  avgFp       Decimal? @map("avg_fp") @db.Decimal(10, 2)
-  avgFcp      Decimal? @map("avg_fcp") @db.Decimal(10, 2)
-  avgLcp      Decimal? @map("avg_lcp") @db.Decimal(10, 2)
-  avgFid      Decimal? @map("avg_fid") @db.Decimal(10, 2)
-  avgCls      Decimal? @map("avg_cls") @db.Decimal(10, 4)
-  avgTtfb     Decimal? @map("avg_ttfb") @db.Decimal(10, 2)
-  avgDns      Decimal? @map("avg_dns") @db.Decimal(10, 2)
-  avgTcp      Decimal? @map("avg_tcp") @db.Decimal(10, 2)
-  avgSsl      Decimal? @map("avg_ssl") @db.Decimal(10, 2)
-  avgLoadTime Decimal? @map("avg_load_time") @db.Decimal(10, 2)
+  page        String   @db.VarChar(255) // 归一化页面(path+hash,去 query);空值归 (unknown)
+  name        String   @db.VarChar(32) // 指标名 FCP/LCP/FID/CLS/TTFB/FSP
+  sampleCount Int      @map("sample_count") // 当天该(项目,页面,指标)标量样本数
+  p75         Decimal? @db.Decimal(12, 4) // 75 分位
+  p95         Decimal? @db.Decimal(12, 4) // 95 分位
+  avgValue    Decimal? @map("avg_value") @db.Decimal(12, 4) // 均值(参考)
+  goodCount   Int      @default(0) @map("good_count") // rating=good 计数
+  niCount     Int      @default(0) @map("ni_count") // rating=needs-improvement 计数
+  poorCount   Int      @default(0) @map("poor_count") // rating=poor 计数
   createdAt   DateTime @default(now()) @map("created_at")
 
-  @@unique([statDate, apikey])
-  @@index([apikey])
-  @@index([statDate])
+  @@unique([statDate, apikey, page, name]) // 唯一键字节 ~1407 < 3072,安全
+  @@index([apikey, statDate])
+  @@index([apikey, page, name])
   @@map("performance_daily_stats")
 }
 

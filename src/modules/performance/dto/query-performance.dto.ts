@@ -18,4 +18,14 @@ export class QueryPerformanceDto extends PaginationDto {
   @IsOptional()
   @Type(() => Number)
   endTime?: number;
+
+  @ApiPropertyOptional({ description: '归一化页面(trend/summary 过滤用)' })
+  @IsOptional()
+  @IsString()
+  pageUrl?: string;
+
+  @ApiPropertyOptional({ description: '指标名(trend 用): FCP/LCP/FID/CLS/TTFB/FSP' })
+  @IsOptional()
+  @IsString()
+  name?: string;
 }

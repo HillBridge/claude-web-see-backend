@@ -15,17 +15,15 @@ const RETENTION = {
 interface DailyAggRow {
   stat_date: Date;
   apikey: string;
+  page: string;
+  name: string;
   sample_count: bigint;
-  avg_fp: string | null;
-  avg_fcp: string | null;
-  avg_lcp: string | null;
-  avg_fid: string | null;
-  avg_cls: string | null;
-  avg_ttfb: string | null;
-  avg_dns: string | null;
-  avg_tcp: string | null;
-  avg_ssl: string | null;
-  avg_load_time: string | null;
+  p75: string | null;
+  p95: string | null;
+  avg_value: string | null;
+  good_count: bigint;
+  ni_count: bigint;
+  poor_count: bigint;
 }
 
 @Injectable()
@@ -51,69 +49,72 @@ export class CleanupService {
     this.logger.log("=== 数据清理完成 ===");
   }
 
-  // PerformanceReport(长格式,一指标一行): 将 30~365 天前的原始数据按 name 透视聚合为每日均值。
-  // sample_count = 当日该项目的标量指标数据点数(非页面加载次数)。
+  // PerformanceReport(长格式): 将 30~365 天前的原始数据按「天×项目×页面×指标」聚合。
+  // 用窗口函数算 p75/p95(CWV 标准口径) + rating 分桶计数(good/ni/poor);页面归一化为 path+hash(去 query)。
   private async aggregatePerformance() {
     const cutoff = daysAgo(RETENTION.performanceRaw);
     const oldest = daysAgo(RETENTION.performanceStat);
 
     const rows = await this.prisma.$queryRaw<DailyAggRow[]>`
+      WITH norm AS (
+        SELECT
+          DATE(created_at) AS d,
+          apikey,
+          COALESCE(NULLIF(LEFT(REGEXP_REPLACE(page_url, '\\\\?[^#]*', ''), 255), ''), '(unknown)') AS page,
+          name, value, rating
+        FROM performance_reports
+        WHERE value IS NOT NULL
+          AND created_at < ${cutoff}
+          AND created_at >= ${oldest}
+      ),
+      ranked AS (
+        SELECT d, apikey, page, name, value, rating,
+          ROW_NUMBER() OVER (PARTITION BY d, apikey, page, name ORDER BY value) AS rn,
+          COUNT(*)     OVER (PARTITION BY d, apikey, page, name) AS cnt
+        FROM norm
+      )
       SELECT
-        DATE(created_at)   AS stat_date,
-        apikey,
-        COUNT(value)                                   AS sample_count,
-        AVG(CASE WHEN name = 'FP'       THEN value END) AS avg_fp,
-        AVG(CASE WHEN name = 'FCP'      THEN value END) AS avg_fcp,
-        AVG(CASE WHEN name = 'LCP'      THEN value END) AS avg_lcp,
-        AVG(CASE WHEN name = 'FID'      THEN value END) AS avg_fid,
-        AVG(CASE WHEN name = 'CLS'      THEN value END) AS avg_cls,
-        AVG(CASE WHEN name = 'TTFB'     THEN value END) AS avg_ttfb,
-        AVG(CASE WHEN name = 'DNS'      THEN value END) AS avg_dns,
-        AVG(CASE WHEN name = 'TCP'      THEN value END) AS avg_tcp,
-        AVG(CASE WHEN name = 'SSL'      THEN value END) AS avg_ssl,
-        AVG(CASE WHEN name = 'loadTime' THEN value END) AS avg_load_time
-      FROM performance_reports
-      WHERE created_at < ${cutoff}
-        AND created_at >= ${oldest}
-        AND value IS NOT NULL
-      GROUP BY DATE(created_at), apikey
+        d AS stat_date, apikey, page, name,
+        MAX(cnt) AS sample_count,
+        MAX(CASE WHEN rn = CEIL(0.75 * cnt) THEN value END) AS p75,
+        MAX(CASE WHEN rn = CEIL(0.95 * cnt) THEN value END) AS p95,
+        AVG(value) AS avg_value,
+        CAST(SUM(rating = 'good') AS UNSIGNED) AS good_count,
+        CAST(SUM(rating = 'needs-improvement') AS UNSIGNED) AS ni_count,
+        CAST(SUM(rating = 'poor') AS UNSIGNED) AS poor_count
+      FROM ranked
+      GROUP BY d, apikey, page, name
     `;
 
     if (rows.length === 0) return;
 
     for (const row of rows) {
+      const data = {
+        sampleCount: Number(row.sample_count),
+        p75: toDecimal(row.p75),
+        p95: toDecimal(row.p95),
+        avgValue: toDecimal(row.avg_value),
+        goodCount: Number(row.good_count),
+        niCount: Number(row.ni_count),
+        poorCount: Number(row.poor_count),
+      };
       await this.prisma.performanceDailyStat.upsert({
         where: {
-          statDate_apikey: { statDate: row.stat_date, apikey: row.apikey },
+          statDate_apikey_page_name: {
+            statDate: row.stat_date,
+            apikey: row.apikey,
+            page: row.page,
+            name: row.name,
+          },
         },
         create: {
           statDate: row.stat_date,
           apikey: row.apikey,
-          sampleCount: Number(row.sample_count),
-          avgFp: toDecimal(row.avg_fp),
-          avgFcp: toDecimal(row.avg_fcp),
-          avgLcp: toDecimal(row.avg_lcp),
-          avgFid: toDecimal(row.avg_fid),
-          avgCls: toDecimal(row.avg_cls),
-          avgTtfb: toDecimal(row.avg_ttfb),
-          avgDns: toDecimal(row.avg_dns),
-          avgTcp: toDecimal(row.avg_tcp),
-          avgSsl: toDecimal(row.avg_ssl),
-          avgLoadTime: toDecimal(row.avg_load_time),
+          page: row.page,
+          name: row.name,
+          ...data,
         },
-        update: {
-          sampleCount: Number(row.sample_count),
-          avgFp: toDecimal(row.avg_fp),
-          avgFcp: toDecimal(row.avg_fcp),
-          avgLcp: toDecimal(row.avg_lcp),
-          avgFid: toDecimal(row.avg_fid),
-          avgCls: toDecimal(row.avg_cls),
-          avgTtfb: toDecimal(row.avg_ttfb),
-          avgDns: toDecimal(row.avg_dns),
-          avgTcp: toDecimal(row.avg_tcp),
-          avgSsl: toDecimal(row.avg_ssl),
-          avgLoadTime: toDecimal(row.avg_load_time),
-        },
+        update: data,
       });
     }
 

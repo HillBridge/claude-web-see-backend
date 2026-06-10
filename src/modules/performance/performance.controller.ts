@@ -17,20 +17,37 @@ export class PerformanceController {
     return this.performanceService.findAll(query, user);
   }
 
-  @ApiOperation({ summary: '某项目性能指标均值' })
-  @Get('avg/:apikey')
-  getAvg(@Param('apikey') apikey: string, @CurrentUser() user: TenantUser) {
-    return this.performanceService.getAvgMetrics(apikey, user);
+  @ApiOperation({ summary: '某项目的页面列表(归一化,供选择器)' })
+  @Get('pages/:apikey')
+  listPages(@Param('apikey') apikey: string, @CurrentUser() user: TenantUser) {
+    return this.performanceService.listPages(apikey, user);
   }
 
-  @ApiOperation({ summary: '某项目性能每日聚合趋势' })
-  @Get('stats/:apikey')
-  getStats(
+  @ApiOperation({ summary: '某项目性能快照(p75/p95 + good 占比,可选按页面)' })
+  @Get('summary/:apikey')
+  getSummary(
+    @Param('apikey') apikey: string,
+    @Query('pageUrl') pageUrl: string,
+    @CurrentUser() user: TenantUser,
+  ) {
+    return this.performanceService.getSummary(apikey, user, pageUrl);
+  }
+
+  @ApiOperation({ summary: '某指标按天趋势(p75 + good 占比,可选按页面)' })
+  @Get('trend/:apikey')
+  getTrend(
     @Param('apikey') apikey: string,
     @Query() query: QueryPerformanceDto,
     @CurrentUser() user: TenantUser,
   ) {
-    return this.performanceService.getDailyStats(apikey, user, query.startTime, query.endTime);
+    return this.performanceService.getTrend(
+      apikey,
+      user,
+      query.name,
+      query.pageUrl,
+      query.startTime,
+      query.endTime,
+    );
   }
 
   @ApiOperation({ summary: '性能数据详情' })

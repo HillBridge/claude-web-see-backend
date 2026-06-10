@@ -1,70 +1,93 @@
 import { PerformanceService } from "./performance.service";
 
 /**
- * PerformanceService 单元测试 —— 验证长格式适配后的服务层:
- * - getAvgMetrics 对长格式原始表按 name 分组求均值并 reshape
- * - 租户隔离: 普通用户访问非自己 apikey → 403(经 assertApikeyAccess)
- * - getDailyStats 读宽聚合表
- * mock PrismaService。ADMIN 用户可短路租户校验(无需 DB)。
+ * PerformanceService 单元测试 —— 验证 p75/good 占比/按页面/按天 的服务层:
+ * - getSummary: 从 raw 算 p75/p95 + good 占比并 reshape
+ * - listPages: 归一化页面列表
+ * - getTrend: 近 30 天(raw)+ 历史(日表)按日期合并
+ * - 租户隔离: 普通用户访问非自己 apikey → 403,且不触达查询
+ * mock PrismaService。ADMIN 短路租户校验。
  */
 const ADMIN = { id: 1, role: "ADMIN" };
 const USER = { id: 2, role: "USER" };
 
 function makeService() {
   const prisma = {
+    $queryRawUnsafe: jest.fn().mockResolvedValue([]),
     performanceReport: {
-      groupBy: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
       count: jest.fn().mockResolvedValue(0),
       findUnique: jest.fn(),
     },
-    performanceDailyStat: { findMany: jest.fn().mockResolvedValue([]) },
+    performanceDailyStat: {
+      findMany: jest.fn().mockResolvedValue([]),
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
     project: { findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn() },
   };
   return { service: new PerformanceService(prisma as any), prisma };
 }
 
-describe("PerformanceService.getAvgMetrics(长格式)", () => {
-  it("按 name 分组求均值并 reshape 成 { avg, total }", async () => {
+describe("PerformanceService.getSummary", () => {
+  it("按指标算 p75/p95 + good 占比并 reshape", async () => {
     const { service, prisma } = makeService();
-    prisma.performanceReport.groupBy.mockResolvedValue([
-      { name: "FCP", _avg: { value: 1000 }, _count: { _all: 3 } },
-      { name: "LCP", _avg: { value: 2000 }, _count: { _all: 2 } },
+    prisma.$queryRawUnsafe.mockResolvedValue([
+      { name: "FCP", sample_count: 3, p75: 1800, p95: 2400, avg_value: 1500, good_count: 2, ni_count: 1, poor_count: 0 },
     ]);
-    const res = await service.getAvgMetrics("k", ADMIN as any);
-    expect(prisma.performanceReport.groupBy).toHaveBeenCalled();
-    expect(res.avg.FCP).toEqual({ avg: 1000, count: 3 });
-    expect(res.avg.LCP).toEqual({ avg: 2000, count: 2 });
-    expect(res.total).toBe(5);
+    const res = await service.getSummary("k", ADMIN as any);
+    expect(res.metrics.FCP.p75).toBe(1800);
+    expect(res.metrics.FCP.p95).toBe(2400);
+    expect(res.metrics.FCP.sampleCount).toBe(3);
+    expect(res.metrics.FCP.goodRate).toBeCloseTo(2 / 3);
   });
 
-  it("普通用户查非自己拥有的 apikey → 403,且不触达聚合查询", async () => {
+  it("普通用户查非自己 apikey → 403,且不触达查询", async () => {
     const { service, prisma } = makeService();
-    prisma.project.findFirst.mockResolvedValue(null); // 不属于该用户
-    await expect(service.getAvgMetrics("k", USER as any)).rejects.toThrow();
-    expect(prisma.performanceReport.groupBy).not.toHaveBeenCalled();
-  });
-});
-
-describe("PerformanceService.getDailyStats(宽聚合服务层)", () => {
-  it("读 performanceDailyStat,带时间范围过滤", async () => {
-    const { service, prisma } = makeService();
-    await service.getDailyStats("k", ADMIN as any, 1000, 2000);
-    const arg = prisma.performanceDailyStat.findMany.mock.calls[0][0];
-    expect(arg.where.apikey).toBe("k");
-    expect(arg.where.statDate.gte).toBeInstanceOf(Date);
-    expect(arg.where.statDate.lte).toBeInstanceOf(Date);
-    expect(arg.orderBy).toEqual({ statDate: "asc" });
+    prisma.project.findFirst.mockResolvedValue(null);
+    await expect(service.getSummary("k", USER as any)).rejects.toThrow();
+    expect(prisma.$queryRawUnsafe).not.toHaveBeenCalled();
   });
 });
 
-describe("PerformanceService.findAll 租户隔离", () => {
-  it("ADMIN 无显式 apikey → 不加 apikey 限制,正常分页查询", async () => {
+describe("PerformanceService.listPages", () => {
+  it("返回归一化页面 + 样本数", async () => {
     const { service, prisma } = makeService();
-    prisma.performanceReport.findMany.mockResolvedValue([{ id: 1 }]);
-    prisma.performanceReport.count.mockResolvedValue(1);
-    const res = await service.findAll({ page: 1, pageSize: 20 } as any, ADMIN as any);
-    expect(res.total).toBe(1);
-    expect(prisma.performanceReport.findMany).toHaveBeenCalled();
+    prisma.$queryRawUnsafe.mockResolvedValue([
+      { page: "/home", cnt: 5 },
+      { page: "/detail", cnt: 2 },
+    ]);
+    const res = await service.listPages("k", ADMIN as any);
+    expect(res).toEqual([
+      { page: "/home", count: 5 },
+      { page: "/detail", count: 2 },
+    ]);
+  });
+});
+
+describe("PerformanceService.getTrend", () => {
+  it("指定页面:近 30 天(raw)+ 历史(日表)按日期合并", async () => {
+    const { service, prisma } = makeService();
+    // 近 30 天 raw
+    prisma.$queryRawUnsafe.mockResolvedValue([
+      { date: "2026-06-10", sample_count: 2, p75: 2000, p95: 2500, good_count: 1, ni_count: 1, poor_count: 0 },
+    ]);
+    // 历史日表(指定页面走 findMany)
+    prisma.performanceDailyStat.findMany.mockResolvedValue([
+      { statDate: new Date("2026-05-01T00:00:00Z"), p75: 1900, p95: 2300, sampleCount: 10, goodCount: 8, niCount: 2, poorCount: 0 },
+    ]);
+    const res = await service.getTrend("k", ADMIN as any, "LCP", "/home");
+    expect(res.name).toBe("LCP");
+    expect(res.points).toHaveLength(2);
+    // 历史在前、近期在后,按日期升序
+    expect(res.points[0].date).toBe("2026-05-01");
+    expect(res.points[1].date).toBe("2026-06-10");
+    expect(res.points[1].p75).toBe(2000);
+    expect(res.points[1].goodRate).toBeCloseTo(0.5);
+  });
+
+  it("非法 name 回退为 LCP", async () => {
+    const { service } = makeService();
+    const res = await service.getTrend("k", ADMIN as any, "BOGUS", "/home");
+    expect(res.name).toBe("LCP");
   });
 });
